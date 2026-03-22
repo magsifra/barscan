@@ -113,7 +113,7 @@
 <div class="toast" id="toast"></div>
 
 <div class="header">
-  <div class="logo">BAR<span>SCAN</span></div>
+  
   <div class="badge" id="hdrBadge">0 stavki</div>
 </div>
 
@@ -635,7 +635,7 @@ function exportPDF() {
     didDrawPage: function(data) {
       doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
       doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
-      doc.text('BarScan', margin, 290);
+      
     }
   });
 
