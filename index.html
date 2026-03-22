@@ -33,9 +33,9 @@
     .header { position:sticky; top:0; z-index:200; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:14px 18px 12px; }
     .logo { font-family:var(--mono); font-size:17px; font-weight:700; letter-spacing:-0.5px; }
     .logo span { color:var(--accent); }
-    .badge { font-family:var(--mono); font-size:11px; background:var(--surface2); border:1px solid var(--border2); border-radius:20px; padding:4px 12px; color:var(--sub); }
+    .badge { font-family:var(--mono); font-size:13px; background:var(--surface2); border:1px solid var(--border2); border-radius:20px; padding:4px 12px; color:var(--sub); }
     .tabs { position:sticky; top:54px; z-index:199; background:var(--bg); border-bottom:1px solid var(--border); display:grid; grid-template-columns:1fr 1fr 1fr; }
-    .tab { font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); background:none; border:none; padding:12px 0; cursor:pointer; border-bottom:2px solid transparent; transition:color .2s,border-color .2s; }
+    .tab { font-family:var(--mono); font-size:13px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); background:none; border:none; padding:12px 0; cursor:pointer; border-bottom:2px solid transparent; transition:color .2s,border-color .2s; }
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .page { display:none; padding:18px; }
     .page.active { display:block; }
@@ -48,7 +48,7 @@
     .corner { position:absolute; width:20px; height:20px; border-color:var(--accent); border-style:solid; }
     .corner.tl{top:0;left:0;border-width:3px 0 0 3px} .corner.tr{top:0;right:0;border-width:3px 3px 0 0}
     .corner.bl{bottom:0;left:0;border-width:0 0 3px 3px} .corner.br{bottom:0;right:0;border-width:0 3px 3px 0}
-    .cam-status { position:absolute; bottom:10px; left:0; right:0; text-align:center; font-family:var(--mono); font-size:10px; color:var(--muted); padding:0 10px; }
+    .cam-status { position:absolute; bottom:10px; left:0; right:0; text-align:center; font-family:var(--mono); font-size:13px; color:var(--muted); padding:0 10px; }
     .cam-status.ok  { color:var(--green); }
     .cam-status.err { color:var(--red); }
     .steps-box { margin:14px 0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:2px 14px; }
@@ -58,22 +58,22 @@
     .dot-done { background:rgba(77,203,145,.15); border:1px solid var(--green); color:var(--green); }
     .dot-pend { background:var(--surface2); border:1px solid var(--border2); color:var(--muted); }
     .dot-act  { background:var(--accent-dim); border:1px solid var(--accent); color:var(--accent); }
-    .step-txt { font-size:12px; color:var(--sub); flex:1; }
+    .step-txt { font-size:15px; color:var(--sub); flex:1; }
     .warn-box { background:rgba(232,88,88,.08); border:1px solid rgba(232,88,88,.3); border-radius:10px; padding:14px 16px; margin:14px 0; }
     .warn-box.info { background:rgba(245,166,35,.07); border-color:rgba(245,166,35,.3); }
     .warn-box .wt  { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--accent); margin-bottom:8px; letter-spacing:.5px; }
-    .warn-box .wb  { font-size:12px; color:var(--sub); line-height:1.7; }
+    .warn-box .wb  { font-size:14px; color:var(--sub); line-height:1.7; }
     .warn-box ol   { padding-left:18px; }
     .warn-box li   { margin-bottom:4px; }
     .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:14px 0; }
     .result-code { font-family:var(--mono); font-size:22px; font-weight:700; color:var(--accent); word-break:break-all; margin-bottom:4px; }
-    .result-type { font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:1px; }
+    .result-type { font-family:var(--mono); font-size:13px; color:var(--muted); letter-spacing:1px; }
     .input-grp { margin-bottom:12px; }
-    .lbl { display:block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
-    .inp { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-family:var(--mono); font-size:14px; color:var(--text); outline:none; transition:border-color .2s; -webkit-appearance:none; }
+    .lbl { display:block; font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+    .inp { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-family:var(--mono); font-size:16px; color:var(--text); outline:none; transition:border-color .2s; -webkit-appearance:none; }
     .inp:focus { border-color:var(--accent); }
     .inp::placeholder { color:var(--muted); }
-    .btn { width:100%; border:none; border-radius:8px; font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.5px; cursor:pointer; padding:14px 16px; transition:opacity .15s,transform .1s; }
+    .btn { width:100%; border:none; border-radius:8px; font-family:var(--mono); font-size:15px; font-weight:600; letter-spacing:.5px; cursor:pointer; padding:14px 16px; transition:opacity .15s,transform .1s; }
     .btn:active { transform:scale(.98); opacity:.85; }
     .btn + .btn { margin-top:10px; }
     .btn-primary { background:var(--accent); color:#0B0B0D; }
@@ -81,24 +81,24 @@
     .btn-danger  { background:rgba(232,88,88,.1); border:1px solid rgba(232,88,88,.3); color:var(--red); }
     .btn-success { background:rgba(77,203,145,.1); border:1px solid rgba(77,203,145,.3); color:var(--green); }
     .inv-item { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; gap:10px; margin-bottom:9px; }
-    .inv-num  { font-family:var(--mono); font-size:10px; color:var(--muted); min-width:22px; }
+    .inv-num  { font-family:var(--mono); font-size:13px; color:var(--muted); min-width:22px; }
     .inv-info { flex:1; min-width:0; }
-    .inv-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .inv-code { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .inv-name { font-size:16px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .inv-code { font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .qty-ctrl { display:flex; align-items:center; gap:6px; }
     .qty-btn  { width:28px; height:28px; background:var(--surface2); border:1px solid var(--border2); color:var(--text); border-radius:6px; cursor:pointer; font-family:var(--mono); font-size:16px; display:flex; align-items:center; justify-content:center; }
-    .qty-num  { font-family:var(--mono); font-size:14px; font-weight:600; min-width:26px; text-align:center; }
+    .qty-num  { font-family:var(--mono); font-size:16px; font-weight:600; min-width:26px; text-align:center; }
     .del-btn  { width:30px; height:30px; flex-shrink:0; background:rgba(232,88,88,.08); border:1px solid rgba(232,88,88,.25); color:var(--red); border-radius:7px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; }
     .barcode-wrap { background:#fff; border-radius:10px; padding:14px; text-align:center; margin:14px 0; }
     #barcodeSvg { max-width:100%; }
     .empty { text-align:center; padding:56px 20px; color:var(--muted); }
     .empty-icon { font-size:44px; opacity:.35; margin-bottom:14px; }
-    .empty-txt  { font-family:var(--mono); font-size:12px; line-height:1.8; }
-    .slbl { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
+    .empty-txt  { font-family:var(--mono); font-size:15px; line-height:1.8; }
+    .slbl { font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
     .sep  { height:1px; background:var(--border); margin:16px 0; }
     .list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
     .search-wrap { position:relative; margin-bottom:14px; }
-    .search-wrap .inp { padding-left:36px; font-size:13px; }
+    .search-wrap .inp { padding-left:36px; font-size:16px; }
     .search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; pointer-events:none; color:var(--muted); }
     .export-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; padding:12px 18px; background:var(--bg); border-top:1px solid var(--border); display:flex; gap:10px; }
     .export-bar .btn { flex:1; margin:0; }
@@ -113,14 +113,13 @@
 <div class="toast" id="toast"></div>
 
 <div class="header">
-  
   <div class="badge" id="hdrBadge">0 stavki</div>
 </div>
 
 <div class="tabs">
-  <button class="tab active" id="tab-scan"   onclick="switchTab('scan')">📷 Skeniraj</button>
-  <button class="tab"        id="tab-manual" onclick="switchTab('manual')">✏️ Ručno</button>
-  <button class="tab"        id="tab-list"   onclick="switchTab('list')">📋 Inventar</button>
+  <button class="tab active" id="tab-scan"   onclick="switchTab('scan')"> Skeniraj</button>
+  <button class="tab"        id="tab-manual" onclick="switchTab('manual')"> Ručno</button>
+  <button class="tab"        id="tab-list"   onclick="switchTab('list')"> Inventar</button>
 </div>
 
 <!-- ══ SCAN ══ -->
@@ -154,11 +153,11 @@
   </div>
 
   <div id="areaPermission">
-    <button class="btn btn-primary" id="btnPermission" onclick="requestPermission()">🔓 Zatraži dozvolu za kameru</button>
+    <button class="btn btn-primary" id="btnPermission" onclick="requestPermission()">Zatraži dozvolu za kameru</button>
   </div>
 
   <div id="areaStart" style="display:none">
-    <button class="btn btn-primary" id="btnStart" onclick="startScanning()">▶ Pokreni skener</button>
+    <button class="btn btn-primary" id="btnStart" onclick="startScanning()">Pokreni skener</button>
   </div>
 
   <div id="scanResult" style="display:none; margin-top:14px">
@@ -174,9 +173,9 @@
       <label class="lbl">Količina</label>
       <input type="number" class="inp" id="scanQty" value="1" min="1" inputmode="numeric">
     </div>
-    <button class="btn btn-primary" onclick="addScannedItem()">+ Dodaj u inventar</button>
-    <button class="btn btn-ghost"   onclick="resumeScanning()">↩ Skeniraj ponovo</button>
-    <button class="btn btn-danger"  onclick="stopAndReset()" style="margin-top:6px">⏹ Zaustavi kameru</button>
+    <button class="btn btn-primary" onclick="addScannedItem()">Dodaj u inventar</button>
+    <button class="btn btn-ghost"   onclick="resumeScanning()">Skeniraj ponovo</button>
+    <button class="btn btn-danger"  onclick="stopAndReset()" style="margin-top:6px">Zaustavi kameru</button>
   </div>
 
 </div>
@@ -185,7 +184,7 @@
 <div class="page" id="page-manual">
   <p class="slbl">Ručni unos</p>
   <div class="warn-box info">
-    <div class="wt">ℹ Uvijek radi</div>
+    <div class="wt">Uvijek radi</div>
     <div class="wb">Ručni unos funkcioniše bez kamere i bez interneta. Broj barkoda piše ispod crtica na pakovanju.</div>
   </div>
   <div class="input-grp" style="margin-top:14px">
@@ -203,10 +202,10 @@
   <button class="btn btn-ghost" onclick="generateBarcode()">Generiši sliku barkoda</button>
   <div id="barcodeOut" style="display:none">
     <div class="barcode-wrap"><svg id="barcodeSvg"></svg></div>
-    <button class="btn btn-ghost" onclick="downloadBarcode()">⬇ Preuzmi PNG</button>
+    <button class="btn btn-ghost" onclick="downloadBarcode()">Preuzmi PNG</button>
   </div>
   <div class="sep"></div>
-  <button class="btn btn-primary" onclick="addManualItem()">+ Dodaj u inventar</button>
+  <button class="btn btn-primary" onclick="addManualItem()">Dodaj u inventar</button>
 </div>
 
 <!-- ══ LIST ══ -->
@@ -216,14 +215,14 @@
     <button class="btn btn-danger" style="width:auto;padding:7px 13px;font-size:10px;margin:0" onclick="clearAll()">Obriši sve</button>
   </div>
   <div class="search-wrap">
-    <span class="search-icon">🔍</span>
+    <span class="search-icon"></span>
     <input type="text" class="inp" id="searchInp" placeholder="Pretraži..." autocomplete="off" oninput="renderInventory()">
   </div>
   <div id="invList"></div>
 </div>
 
 <div class="export-bar" id="exportBar" style="display:none">
-  <button class="btn btn-success" onclick="exportPDF()">⬇ PDF</button>
+  <button class="btn btn-success" onclick="exportPDF()">PDF</button>
   <button class="btn btn-ghost"   onclick="exportCSV()" style="max-width:90px">CSV</button>
 </div>
 
@@ -262,7 +261,7 @@ function requestPermission() {
   setStatus('Čeka se odgovor od sistema...', '');
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    btn.textContent = '🔓 Zatraži dozvolu za kameru';
+    btn.textContent = 'Zatraži dozvolu za kameru';
     btn.disabled = false;
     setStatus('Kamera nije podržana', 'err');
     showCamErr('Browser ne podržava kameru. Koristite <strong>Chrome</strong>.');
@@ -273,16 +272,16 @@ function requestPermission() {
     .then(function(stream) {
       stream.getTracks().forEach(function(t) { t.stop(); });
       document.getElementById('dot1').className = 'step-dot dot-done';
-      document.getElementById('dot1').textContent = '✓';
-      document.getElementById('txt1').textContent = 'Dozvola odobrena ✓';
+      document.getElementById('dot1').textContent = 'ok';
+      document.getElementById('txt1').textContent = 'Dozvola odobrena';
       document.getElementById('dot2').className = 'step-dot dot-act';
       document.getElementById('areaPermission').style.display = 'none';
       document.getElementById('areaStart').style.display = 'block';
       setStatus('Dozvola odobrena — pritisnite Pokreni', 'ok');
-      toast('Dozvola odobrena ✓');
+      toast('Dozvola odobrena');
     })
     .catch(function(e) {
-      btn.textContent = '🔓 Zatraži dozvolu za kameru';
+      btn.textContent = 'Zatraži dozvolu za kameru';
       btn.disabled = false;
       handleCamErr(e);
     });
@@ -325,17 +324,17 @@ function startScanning() {
           }
         } else {
           setStatus('Ažurirajte Chrome na v83+ za skeniranje', 'err');
-          showCamErr('Vaš Chrome ne podržava BarcodeDetector.<br>Ažurirajte Chrome ili koristite <strong>✏️ Ručni unos</strong>.');
+          showCamErr('Vaš Chrome ne podržava BarcodeDetector.<br>Ažurirajte Chrome ili koristite <strong>Ručni unos</strong>.');
         }
       }).catch(function(ex) {
-        btn.textContent = '▶ Pokreni skener';
+        btn.textContent = 'Pokreni skener';
         btn.disabled = false;
         handleCamErr(ex);
       });
     };
   })
   .catch(function(e) {
-    btn.textContent = '▶ Pokreni skener';
+    btn.textContent = 'Pokreni skener';
     btn.disabled = false;
     handleCamErr(e);
   });
@@ -372,7 +371,7 @@ function onCode(code, type) {
   document.getElementById('scanOverlay').style.display = 'none';
   document.getElementById('scanResult').style.display  = 'block';
   document.getElementById('scanResult').classList.add('flash');
-  setStatus('✓ Barkod prepoznat', 'ok');
+  setStatus('Barkod prepoznat', 'ok');
   var ex = inv.find(function(i) { return i.code === code; });
   document.getElementById('scanName').value = ex ? ex.name : '';
   document.getElementById('scanQty').value  = 1;
@@ -403,7 +402,7 @@ function stopAndReset() {
   document.getElementById('stepsBox').style.display    = 'block';
   document.getElementById('areaStart').style.display   = 'block';
   document.getElementById('btnStart').disabled    = false;
-  document.getElementById('btnStart').textContent = '▶ Pokreni skener';
+  document.getElementById('btnStart').textContent = 'Pokreni skener';
   setStatus('Kamera zaustavljena', '');
 }
 
@@ -444,7 +443,7 @@ function handleCamErr(e) {
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
     status = 'Dozvola odbijena';
     html = '<strong>Dozvola odbijena.</strong><br><ol>' +
-           '<li>Pritisnite 🔒 u adresnoj traci Chromea</li>' +
+           '<li>Pritisnite ikonu katanca u adresnoj traci Chromea</li>' +
            '<li>Kamera → <strong>Dozvoli</strong></li>' +
            '<li>Osvježite stranicu</li></ol>';
   } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
@@ -455,7 +454,7 @@ function handleCamErr(e) {
     html = 'Zatvorite ostale aplikacije i pokušajte ponovo.';
   } else {
     status = msg.slice(0, 60);
-    html = 'Greška: ' + esc(msg) + '<br>Koristite <strong>✏️ Ručni unos</strong>.';
+    html = 'Greška: ' + esc(msg) + '<br>Koristite <strong>Ručni unos</strong>.';
   }
   setStatus(status, 'err');
   showCamErr(html);
@@ -466,7 +465,7 @@ function showCamErr(html) {
   if (old) old.remove();
   var d = document.createElement('div');
   d.id = 'dynErr'; d.className = 'warn-box'; d.style.marginTop = '14px';
-  d.innerHTML = '<div class="wt">⚠ Problem s kamerom</div><div class="wb">' + html + '</div>';
+  d.innerHTML = '<div class="wt">Problem s kamerom</div><div class="wb">' + html + '</div>';
   document.getElementById('page-scan').appendChild(d);
 }
 
@@ -550,10 +549,10 @@ function upsert(code, name, qty, fmt) {
   if (idx >= 0) {
     inv[idx].qty += qty;
     inv[idx].name = name;
-    toast('✓ Ažurirano: ' + name);
+    toast('Ažurirano: ' + name);
   } else {
     inv.push({ id: Date.now() + Math.random(), code: String(code), name: String(name), qty: Number(qty), fmt: fmt || 'MANUAL', date: new Date().toLocaleDateString('bs-BA') });
-    toast('✓ Dodano: ' + name);
+    toast('Dodano: ' + name);
   }
   persist();
 }
@@ -573,7 +572,7 @@ function renderInventory() {
   var el  = document.getElementById('invList');
   var flt = q ? inv.filter(function(i){ return i.name.toLowerCase().includes(q)||i.code.toLowerCase().includes(q); }) : inv;
   if (!flt.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-txt">' +
+    el.innerHTML = '<div class="empty"><div class="empty-icon"></div><div class="empty-txt">' +
       (inv.length ? 'Nema rezultata.' : 'Inventar je prazan.<br>Skenirajte ili unesite ručno.') + '</div></div>';
     return;
   }
@@ -586,7 +585,7 @@ function renderInventory() {
         '<span class="qty-num">' + item.qty + '</span>' +
         '<button class="qty-btn" onclick="changeQty(' + item.id + ',1)">+</button>' +
       '</div>' +
-      '<button class="del-btn" onclick="removeItem(' + item.id + ')">✕</button>' +
+      '<button class="del-btn" onclick="removeItem(' + item.id + ')">Obriši</button>' +
     '</div>';
   }).join('');
 }
@@ -635,7 +634,6 @@ function exportPDF() {
     didDrawPage: function(data) {
       doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
       doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
-      
     }
   });
 
@@ -643,7 +641,7 @@ function exportPDF() {
 
   var pdfData = doc.output('datauristring');
   mobileDownload(pdfData, 'inventar_' + now.toISOString().slice(0,10) + '.pdf', 'pdf');
-  toast('PDF kreiran ✓');
+  toast('PDF kreiran');
 }
 
 // ── CSV Export ───────────────────────────────────────────────────
@@ -653,7 +651,7 @@ function exportCSV() {
   var csv  = '\uFEFF' + ['Rb,Naziv,Barkod,Kolicina'].concat(rows).join('\r\n');
   var b64  = btoa(unescape(encodeURIComponent(csv)));
   mobileDownload('data:text/csv;charset=utf-8;base64,'+b64, 'inventar_'+new Date().toISOString().slice(0,10)+'.csv', 'csv');
-  toast('CSV kreiran ✓');
+  toast('CSV kreiran');
 }
 
 // ── Download (Android) ───────────────────────────────────────────
@@ -695,14 +693,14 @@ function mobileDownload(dataUri, filename, type) {
 function showSaveModal(dataUri, filename, type) {
   var old = document.getElementById('saveModal');
   if (old) old.remove();
-  var icon = type === 'pdf' ? '📄' : '📊';
+  var icon = '';
   var m = document.createElement('div');
   m.id = 'saveModal';
   m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
   m.innerHTML = '<div style="background:#1C1C20;border:1px solid #333;border-radius:16px 16px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;">' +
     '<div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;">' + icon + ' Fajl je spreman</div>' +
-    '<div style="font-size:13px;color:var(--sub);line-height:1.8;margin-bottom:20px;">Pritisnite dugme, zatim: ⋮ → <strong>Dijeli</strong> → <strong>Sačuvaj</strong></div>' +
-    '<a href="' + dataUri + '" download="' + filename + '" target="_blank" style="display:block;background:var(--accent);color:#0B0B0D;text-align:center;padding:14px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;text-decoration:none;margin-bottom:10px;">' + icon + ' Otvori ' + type.toUpperCase() + '</a>' +
+    '<div style="font-size:13px;color:var(--sub);line-height:1.8;margin-bottom:20px;">Pritisnite dugme, zatim: meni → <strong>Dijeli</strong> → <strong>Sačuvaj</strong></div>' +
+    '<a href="' + dataUri + '" download="' + filename + '" target="_blank" style="display:block;background:var(--accent);color:#0B0B0D;text-align:center;padding:14px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;text-decoration:none;margin-bottom:10px;">' + ' Otvori ' + type.toUpperCase() + '</a>' +
     '<button onclick="document.getElementById(\'saveModal\').remove()" style="width:100%;background:var(--surface2);border:1px solid var(--border2);color:var(--sub);padding:12px;border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer;">Zatvori</button>' +
   '</div>';
   document.body.appendChild(m);
