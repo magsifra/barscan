@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BarScan">
+  <meta name="theme-color" content="#0B0B0D">
+  <title>BarScan</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BarScan">
+  <meta name="theme-color" content="#0B0B0D">
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    :root {
+      --bg:#0B0B0D; --surface:#141416; --surface2:#1C1C20;
+      --border:#272730; --border2:#333340;
+      --accent:#F5A623; --accent-dim:rgba(245,166,35,.12);
+      --text:#EDEBE5; --muted:#6A6860; --sub:#AAA89F;
+      --green:#4DCB91; --red:#E85858;
+      --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+    }
+    body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; max-width:480px; margin:0 auto; padding-bottom:90px; overscroll-behavior:none; }
+    .header { position:sticky; top:0; z-index:200; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:14px 18px 12px; }
+    .logo { font-family:var(--mono); font-size:17px; font-weight:700; letter-spacing:-0.5px; }
+    .logo span { color:var(--accent); }
+    .badge { font-family:var(--mono); font-size:11px; background:var(--surface2); border:1px solid var(--border2); border-radius:20px; padding:4px 12px; color:var(--sub); }
+    .tabs { position:sticky; top:54px; z-index:199; background:var(--bg); border-bottom:1px solid var(--border); display:grid; grid-template-columns:1fr 1fr 1fr; }
+    .tab { font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); background:none; border:none; padding:12px 0; cursor:pointer; border-bottom:2px solid transparent; transition:color .2s,border-color .2s; }
+    .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .page { display:none; padding:18px; }
+    .page.active { display:block; }
+    .cam-wrap { position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:12px; overflow:hidden; border:1px solid var(--border); }
+    #video { width:100%; height:100%; object-fit:cover; display:block; }
+    .scan-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+    .scan-frame { width:72%; aspect-ratio:3/1; position:relative; }
+    .scan-frame::before { content:''; position:absolute; left:0; right:0; height:2px; background:var(--accent); box-shadow:0 0 10px var(--accent); animation:swipe 1.8s ease-in-out infinite; }
+    @keyframes swipe { 0%{top:0;opacity:1} 85%{top:calc(100% - 2px);opacity:1} 100%{top:calc(100% - 2px);opacity:0} }
+    .corner { position:absolute; width:20px; height:20px; border-color:var(--accent); border-style:solid; }
+    .corner.tl{top:0;left:0;border-width:3px 0 0 3px} .corner.tr{top:0;right:0;border-width:3px 3px 0 0}
+    .corner.bl{bottom:0;left:0;border-width:0 0 3px 3px} .corner.br{bottom:0;right:0;border-width:0 3px 3px 0}
+    .cam-status { position:absolute; bottom:10px; left:0; right:0; text-align:center; font-family:var(--mono); font-size:10px; color:var(--muted); padding:0 10px; }
+    .cam-status.ok  { color:var(--green); }
+    .cam-status.err { color:var(--red); }
+    .steps-box { margin:14px 0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:2px 14px; }
+    .step-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .step-row:last-child { border-bottom:none; }
+    .step-dot { width:24px; height:24px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:10px; font-weight:700; }
+    .dot-done { background:rgba(77,203,145,.15); border:1px solid var(--green); color:var(--green); }
+    .dot-pend { background:var(--surface2); border:1px solid var(--border2); color:var(--muted); }
+    .dot-act  { background:var(--accent-dim); border:1px solid var(--accent); color:var(--accent); }
+    .step-txt { font-size:12px; color:var(--sub); flex:1; }
+    .warn-box { background:rgba(232,88,88,.08); border:1px solid rgba(232,88,88,.3); border-radius:10px; padding:14px 16px; margin:14px 0; }
+    .warn-box.info { background:rgba(245,166,35,.07); border-color:rgba(245,166,35,.3); }
+    .warn-box .wt  { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--accent); margin-bottom:8px; letter-spacing:.5px; }
+    .warn-box .wb  { font-size:12px; color:var(--sub); line-height:1.7; }
+    .warn-box ol   { padding-left:18px; }
+    .warn-box li   { margin-bottom:4px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:14px 0; }
+    .result-code { font-family:var(--mono); font-size:22px; font-weight:700; color:var(--accent); word-break:break-all; margin-bottom:4px; }
+    .result-type { font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:1px; }
+    .input-grp { margin-bottom:12px; }
+    .lbl { display:block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+    .inp { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-family:var(--mono); font-size:14px; color:var(--text); outline:none; transition:border-color .2s; -webkit-appearance:none; }
+    .inp:focus { border-color:var(--accent); }
+    .inp::placeholder { color:var(--muted); }
+    .btn { width:100%; border:none; border-radius:8px; font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.5px; cursor:pointer; padding:14px 16px; transition:opacity .15s,transform .1s; }
+    .btn:active { transform:scale(.98); opacity:.85; }
+    .btn + .btn { margin-top:10px; }
+    .btn-primary { background:var(--accent); color:#0B0B0D; }
+    .btn-ghost   { background:var(--surface2); border:1px solid var(--border2); color:var(--text); }
+    .btn-danger  { background:rgba(232,88,88,.1); border:1px solid rgba(232,88,88,.3); color:var(--red); }
+    .btn-success { background:rgba(77,203,145,.1); border:1px solid rgba(77,203,145,.3); color:var(--green); }
+    .inv-item { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+    .inv-num  { font-family:var(--mono); font-size:10px; color:var(--muted); min-width:22px; }
+    .inv-info { flex:1; min-width:0; }
+    .inv-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .inv-code { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .qty-ctrl { display:flex; align-items:center; gap:6px; }
+    .qty-btn  { width:28px; height:28px; background:var(--surface2); border:1px solid var(--border2); color:var(--text); border-radius:6px; cursor:pointer; font-family:var(--mono); font-size:16px; display:flex; align-items:center; justify-content:center; }
+    .qty-num  { font-family:var(--mono); font-size:14px; font-weight:600; min-width:26px; text-align:center; }
+    .del-btn  { width:30px; height:30px; flex-shrink:0; background:rgba(232,88,88,.08); border:1px solid rgba(232,88,88,.25); color:var(--red); border-radius:7px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; }
+    .barcode-wrap { background:#fff; border-radius:10px; padding:14px; text-align:center; margin:14px 0; }
+    #barcodeSvg { max-width:100%; }
+    .empty { text-align:center; padding:56px 20px; color:var(--muted); }
+    .empty-icon { font-size:44px; opacity:.35; margin-bottom:14px; }
+    .empty-txt  { font-family:var(--mono); font-size:12px; line-height:1.8; }
+    .slbl { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
+    .sep  { height:1px; background:var(--border); margin:16px 0; }
+    .list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .search-wrap { position:relative; margin-bottom:14px; }
+    .search-wrap .inp { padding-left:36px; font-size:13px; }
+    .search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; pointer-events:none; color:var(--muted); }
+    .export-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; padding:12px 18px; background:var(--bg); border-top:1px solid var(--border); display:flex; gap:10px; }
+    .export-bar .btn { flex:1; margin:0; }
+    .toast { position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-70px); background:var(--surface2); border:1px solid var(--border2); color:var(--text); padding:9px 18px; border-radius:24px; font-family:var(--mono); font-size:11px; z-index:9999; transition:transform .28s cubic-bezier(.4,0,.2,1); white-space:nowrap; pointer-events:none; }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+    @keyframes flash { 0%,100%{opacity:1} 40%{opacity:.3} }
+    .flash { animation:flash .4s ease; }
+  </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="header">
+  <div class="logo">BAR<span>SCAN</span></div>
+  <div class="badge" id="hdrBadge">0 stavki</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="tab-scan"   onclick="switchTab('scan')">📷 Skeniraj</button>
+  <button class="tab"        id="tab-manual" onclick="switchTab('manual')">✏️ Ručno</button>
+  <button class="tab"        id="tab-list"   onclick="switchTab('list')">📋 Inventar</button>
+</div>
+
+<!-- ══ SCAN ══ -->
+<div class="page active" id="page-scan">
+
+  <div class="cam-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="scan-overlay" id="scanOverlay" style="display:none">
+      <div class="scan-frame">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+      </div>
+    </div>
+    <div class="cam-status" id="camStatus">Pritisnite dugme ispod</div>
+    <div id="zoomBar" style="display:none; position:absolute; bottom:36px; left:50%; transform:translateX(-50%); display:none; align-items:center; gap:10px; background:rgba(0,0,0,.55); padding:6px 14px; border-radius:24px;">
+      <button onclick="changeZoom(-0.5)" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">−</button>
+      <span id="zoomLabel" style="font-family:var(--mono);font-size:12px;color:#fff;min-width:36px;text-align:center;">1.0×</span>
+      <button onclick="changeZoom(+0.5)" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">+</button>
+    </div>
+  </div>
+
+  <div class="steps-box" id="stepsBox">
+    <div class="step-row">
+      <div class="step-dot dot-act" id="dot1">1</div>
+      <div class="step-txt" id="txt1">Zatraži dozvolu za kameru</div>
+    </div>
+    <div class="step-row">
+      <div class="step-dot dot-pend" id="dot2">2</div>
+      <div class="step-txt">Pokreni skener</div>
+    </div>
+  </div>
+
+  <div id="areaPermission">
+    <button class="btn btn-primary" id="btnPermission" onclick="requestPermission()">🔓 Zatraži dozvolu za kameru</button>
+  </div>
+
+  <div id="areaStart" style="display:none">
+    <button class="btn btn-primary" id="btnStart" onclick="startScanning()">▶ Pokreni skener</button>
+  </div>
+
+  <div id="scanResult" style="display:none; margin-top:14px">
+    <div class="card">
+      <div class="result-code" id="resCoded">—</div>
+      <div class="result-type" id="resType">—</div>
+    </div>
+    <div class="input-grp">
+      <label class="lbl">Naziv proizvoda</label>
+      <input type="text" class="inp" id="scanName" placeholder="Unesite naziv..." autocomplete="off">
+    </div>
+    <div class="input-grp">
+      <label class="lbl">Količina</label>
+      <input type="number" class="inp" id="scanQty" value="1" min="1" inputmode="numeric">
+    </div>
+    <button class="btn btn-primary" onclick="addScannedItem()">+ Dodaj u inventar</button>
+    <button class="btn btn-ghost"   onclick="resumeScanning()">↩ Skeniraj ponovo</button>
+    <button class="btn btn-danger"  onclick="stopAndReset()" style="margin-top:6px">⏹ Zaustavi kameru</button>
+  </div>
+
+</div>
+
+<!-- ══ MANUAL ══ -->
+<div class="page" id="page-manual">
+  <p class="slbl">Ručni unos</p>
+  <div class="warn-box info">
+    <div class="wt">ℹ Uvijek radi</div>
+    <div class="wb">Ručni unos funkcioniše bez kamere i bez interneta. Broj barkoda piše ispod crtica na pakovanju.</div>
+  </div>
+  <div class="input-grp" style="margin-top:14px">
+    <label class="lbl">Broj barkoda</label>
+    <input type="text" class="inp" id="mCode" placeholder="pr. 5901234123457" inputmode="numeric" autocomplete="off" oninput="clearPreview()">
+  </div>
+  <div class="input-grp">
+    <label class="lbl">Naziv proizvoda</label>
+    <input type="text" class="inp" id="mName" placeholder="Naziv..." autocomplete="off">
+  </div>
+  <div class="input-grp">
+    <label class="lbl">Količina</label>
+    <input type="number" class="inp" id="mQty" value="1" min="1" inputmode="numeric">
+  </div>
+  <button class="btn btn-ghost" onclick="generateBarcode()">Generiši sliku barkoda</button>
+  <div id="barcodeOut" style="display:none">
+    <div class="barcode-wrap"><svg id="barcodeSvg"></svg></div>
+    <button class="btn btn-ghost" onclick="downloadBarcode()">⬇ Preuzmi PNG</button>
+  </div>
+  <div class="sep"></div>
+  <button class="btn btn-primary" onclick="addManualItem()">+ Dodaj u inventar</button>
+</div>
+
+<!-- ══ LIST ══ -->
+<div class="page" id="page-list">
+  <div class="list-header">
+    <p class="slbl" style="margin:0">Inventar</p>
+    <button class="btn btn-danger" style="width:auto;padding:7px 13px;font-size:10px;margin:0" onclick="clearAll()">Obriši sve</button>
+  </div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" class="inp" id="searchInp" placeholder="Pretraži..." autocomplete="off" oninput="renderInventory()">
+  </div>
+  <div id="invList"></div>
+</div>
+
+<div class="export-bar" id="exportBar" style="display:none">
+  <button class="btn btn-success" onclick="exportPDF()">⬇ PDF</button>
+  <button class="btn btn-ghost"   onclick="exportCSV()" style="max-width:90px">CSV</button>
+</div>
+
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────────
+var inv = [];
+try { inv = JSON.parse(localStorage.getItem('bs_inv') || '[]'); } catch(e) { inv = []; }
+var cTab      = 'scan';
+var last      = null;
+var camStream  = null;
+var scanTimer  = null;
+var scanning   = false;
+var detector   = null;
+var zoomLevel  = 1.0;
+var minZoom    = 1.0;
+var maxZoom    = 8.0;
+
+// ── Tabs ─────────────────────────────────────────────────────────
+function switchTab(name) {
+  cTab = name;
+  ['scan','manual','list'].forEach(function(t) {
+    document.getElementById('tab-'  + t).classList.toggle('active', t === name);
+    document.getElementById('page-' + t).classList.toggle('active', t === name);
+  });
+  document.getElementById('exportBar').style.display = (name === 'list' && inv.length) ? 'flex' : 'none';
+  if (name !== 'scan') stopCamera();
+}
+
+// ── Korak 1: Traži dozvolu ───────────────────────────────────────
+function requestPermission() {
+  var btn = document.getElementById('btnPermission');
+  btn.textContent = 'Čeka se dozvola...';
+  btn.disabled = true;
+  setStatus('Čeka se odgovor od sistema...', '');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    btn.textContent = '🔓 Zatraži dozvolu za kameru';
+    btn.disabled = false;
+    setStatus('Kamera nije podržana', 'err');
+    showCamErr('Browser ne podržava kameru. Koristite <strong>Chrome</strong>.');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    .then(function(stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      document.getElementById('dot1').className = 'step-dot dot-done';
+      document.getElementById('dot1').textContent = '✓';
+      document.getElementById('txt1').textContent = 'Dozvola odobrena ✓';
+      document.getElementById('dot2').className = 'step-dot dot-act';
+      document.getElementById('areaPermission').style.display = 'none';
+      document.getElementById('areaStart').style.display = 'block';
+      setStatus('Dozvola odobrena — pritisnite Pokreni', 'ok');
+      toast('Dozvola odobrena ✓');
+    })
+    .catch(function(e) {
+      btn.textContent = '🔓 Zatraži dozvolu za kameru';
+      btn.disabled = false;
+      handleCamErr(e);
+    });
+}
+
+// ── Korak 2: Pokreni skener ──────────────────────────────────────
+function startScanning() {
+  var btn = document.getElementById('btnStart');
+  btn.textContent = 'Pokretanje kamere...';
+  btn.disabled = true;
+  setStatus('Pokrećem kameru...', '');
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false
+  })
+  .then(function(stream) {
+    camStream = stream;
+    var video = document.getElementById('video');
+    video.srcObject = stream;
+    video.onloadedmetadata = function() {
+      video.play().then(function() {
+        document.getElementById('stepsBox').style.display = 'none';
+        document.getElementById('areaStart').style.display = 'none';
+        document.getElementById('scanOverlay').style.display = 'flex';
+        document.getElementById('zoomBar').style.display = 'flex';
+        zoomLevel = 1.0;
+        document.getElementById('zoomLabel').textContent = '1.0×';
+        setStatus('Usmjerite kameru na barkod...', '');
+
+        if ('BarcodeDetector' in window) {
+          try {
+            detector = new BarcodeDetector({
+              formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code','pdf417','data_matrix','itf','codabar','aztec']
+            });
+            scanning = true;
+            scanLoop();
+          } catch(ex) {
+            setStatus('Greška: ' + ex.message, 'err');
+          }
+        } else {
+          setStatus('Ažurirajte Chrome na v83+ za skeniranje', 'err');
+          showCamErr('Vaš Chrome ne podržava BarcodeDetector.<br>Ažurirajte Chrome ili koristite <strong>✏️ Ručni unos</strong>.');
+        }
+      }).catch(function(ex) {
+        btn.textContent = '▶ Pokreni skener';
+        btn.disabled = false;
+        handleCamErr(ex);
+      });
+    };
+  })
+  .catch(function(e) {
+    btn.textContent = '▶ Pokreni skener';
+    btn.disabled = false;
+    handleCamErr(e);
+  });
+}
+
+// ── Scan loop ────────────────────────────────────────────────────
+function scanLoop() {
+  if (!scanning || !detector) return;
+  var video = document.getElementById('video');
+  if (!video || video.readyState < 2) {
+    scanTimer = setTimeout(scanLoop, 150);
+    return;
+  }
+  detector.detect(video)
+    .then(function(results) {
+      if (!scanning) return;
+      if (results && results.length > 0) {
+        scanning = false;
+        var r = results[0];
+        onCode(r.rawValue, (r.format || 'BARKOD').toUpperCase().replace(/_/g, '-'));
+      } else {
+        scanTimer = setTimeout(scanLoop, 150);
+      }
+    })
+    .catch(function() {
+      if (scanning) scanTimer = setTimeout(scanLoop, 150);
+    });
+}
+
+function onCode(code, type) {
+  last = { code: code, type: type };
+  document.getElementById('resCoded').textContent = code;
+  document.getElementById('resType').textContent  = type;
+  document.getElementById('scanOverlay').style.display = 'none';
+  document.getElementById('scanResult').style.display  = 'block';
+  document.getElementById('scanResult').classList.add('flash');
+  setStatus('✓ Barkod prepoznat', 'ok');
+  var ex = inv.find(function(i) { return i.code === code; });
+  document.getElementById('scanName').value = ex ? ex.name : '';
+  document.getElementById('scanQty').value  = 1;
+  setTimeout(function() { document.getElementById('scanName').focus(); }, 300);
+}
+
+function addScannedItem() {
+  if (!last) return;
+  var name = document.getElementById('scanName').value.trim() || last.code;
+  var qty  = parseInt(document.getElementById('scanQty').value) || 1;
+  upsert(last.code, name, qty, last.type);
+  document.getElementById('scanResult').style.display = 'none';
+  resumeScanning();
+}
+
+function resumeScanning() {
+  document.getElementById('scanResult').style.display  = 'none';
+  document.getElementById('scanOverlay').style.display = 'flex';
+  setStatus('Usmjerite kameru na barkod...', '');
+  scanning = true;
+  scanLoop();
+}
+
+function stopAndReset() {
+  stopCamera();
+  document.getElementById('scanResult').style.display  = 'none';
+  document.getElementById('scanOverlay').style.display = 'none';
+  document.getElementById('stepsBox').style.display    = 'block';
+  document.getElementById('areaStart').style.display   = 'block';
+  document.getElementById('btnStart').disabled    = false;
+  document.getElementById('btnStart').textContent = '▶ Pokreni skener';
+  setStatus('Kamera zaustavljena', '');
+}
+
+function stopCamera() {
+  scanning = false;
+  detector = null;
+  clearTimeout(scanTimer);
+  scanTimer = null;
+  if (camStream) {
+    camStream.getTracks().forEach(function(t) { t.stop(); });
+    camStream = null;
+  }
+  var v = document.getElementById('video');
+  if (v) v.srcObject = null;
+  document.getElementById('zoomBar').style.display = 'none';
+}
+
+function changeZoom(delta) {
+  if (!camStream) return;
+  var track = camStream.getVideoTracks()[0];
+  if (!track) return;
+  var caps = track.getCapabilities ? track.getCapabilities() : {};
+  var zMin = (caps.zoom && caps.zoom.min) ? caps.zoom.min : 1.0;
+  var zMax = (caps.zoom && caps.zoom.max) ? caps.zoom.max : 8.0;
+  zoomLevel = Math.min(zMax, Math.max(zMin, zoomLevel + delta));
+  zoomLevel = Math.round(zoomLevel * 10) / 10;
+  try {
+    track.applyConstraints({ advanced: [{ zoom: zoomLevel }] })
+      .catch(function() {});
+  } catch(e) {}
+  document.getElementById('zoomLabel').textContent = zoomLevel.toFixed(1) + '×';
+}
+
+function handleCamErr(e) {
+  var name = e && e.name ? e.name : '';
+  var msg  = e && e.message ? e.message : String(e);
+  var status, html;
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    status = 'Dozvola odbijena';
+    html = '<strong>Dozvola odbijena.</strong><br><ol>' +
+           '<li>Pritisnite 🔒 u adresnoj traci Chromea</li>' +
+           '<li>Kamera → <strong>Dozvoli</strong></li>' +
+           '<li>Osvježite stranicu</li></ol>';
+  } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    status = 'Kamera nije pronađena';
+    html = 'Kamera nije dostupna ili je zauzeta.';
+  } else if (name === 'NotReadableError') {
+    status = 'Kamera zauzeta';
+    html = 'Zatvorite ostale aplikacije i pokušajte ponovo.';
+  } else {
+    status = msg.slice(0, 60);
+    html = 'Greška: ' + esc(msg) + '<br>Koristite <strong>✏️ Ručni unos</strong>.';
+  }
+  setStatus(status, 'err');
+  showCamErr(html);
+}
+
+function showCamErr(html) {
+  var old = document.getElementById('dynErr');
+  if (old) old.remove();
+  var d = document.createElement('div');
+  d.id = 'dynErr'; d.className = 'warn-box'; d.style.marginTop = '14px';
+  d.innerHTML = '<div class="wt">⚠ Problem s kamerom</div><div class="wb">' + html + '</div>';
+  document.getElementById('page-scan').appendChild(d);
+}
+
+function setStatus(msg, cls) {
+  var el = document.getElementById('camStatus');
+  el.textContent = msg;
+  el.className = 'cam-status' + (cls ? ' ' + cls : '');
+}
+
+// ── Ručni unos ───────────────────────────────────────────────────
+function detectFmt(code) {
+  var c = code.trim();
+  if (/^\d+$/.test(c)) {
+    if (c.length === 13) return 'EAN13';
+    if (c.length === 8)  return 'EAN8';
+    if (c.length === 12) return 'UPC';
+    return 'CODE128';
+  }
+  if (/^[0-9A-Z\s\$%\+\-\.\/]+$/.test(c) && c.length <= 43) return 'CODE39';
+  return 'CODE128';
+}
+
+function generateBarcode() {
+  var code = document.getElementById('mCode').value.trim();
+  if (!code) { toast('Unesite broj barkoda'); return; }
+  var fmt  = detectFmt(code);
+  var opts = { format: fmt, width: 2, height: 80, displayValue: true, margin: 14, fontOptions: 'bold', fontSize: 13 };
+  try {
+    JsBarcode('#barcodeSvg', code, opts);
+    document.getElementById('barcodeOut').style.display = 'block';
+    toast('Format: ' + fmt);
+  } catch(e) {
+    try {
+      opts.format = 'CODE128';
+      JsBarcode('#barcodeSvg', code, opts);
+      document.getElementById('barcodeOut').style.display = 'block';
+      toast('Format: CODE128');
+    } catch(e2) { toast('Greška: ' + e2.message); }
+  }
+}
+
+function clearPreview() { document.getElementById('barcodeOut').style.display = 'none'; }
+
+function downloadBarcode() {
+  var svg  = document.getElementById('barcodeSvg');
+  var data = new XMLSerializer().serializeToString(svg);
+  var blob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var img  = new Image();
+  img.onload = function() {
+    var c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    var a = document.createElement('a');
+    a.download = 'barcode_' + document.getElementById('mCode').value + '.png';
+    a.href = c.toDataURL('image/png');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+  img.src = url;
+}
+
+function addManualItem() {
+  var code = document.getElementById('mCode').value.trim();
+  var name = document.getElementById('mName').value.trim() || code;
+  var qty  = parseInt(document.getElementById('mQty').value) || 1;
+  if (!code) { toast('Unesite barkod broj'); return; }
+  upsert(code, name, qty, detectFmt(code));
+  document.getElementById('mCode').value = '';
+  document.getElementById('mName').value = '';
+  document.getElementById('mQty').value  = 1;
+  document.getElementById('barcodeOut').style.display = 'none';
+  switchTab('list');
+}
+
+// ── Inventar ─────────────────────────────────────────────────────
+function upsert(code, name, qty, fmt) {
+  var idx = inv.findIndex(function(i) { return i.code === code; });
+  if (idx >= 0) {
+    inv[idx].qty += qty;
+    inv[idx].name = name;
+    toast('✓ Ažurirano: ' + name);
+  } else {
+    inv.push({ id: Date.now() + Math.random(), code: String(code), name: String(name), qty: Number(qty), fmt: fmt || 'MANUAL', date: new Date().toLocaleDateString('bs-BA') });
+    toast('✓ Dodano: ' + name);
+  }
+  persist();
+}
+function changeQty(id, d) { var i = inv.find(function(x){return x.id===id;}); if(i){i.qty=Math.max(1,i.qty+d);persist();} }
+function removeItem(id)    { inv=inv.filter(function(x){return x.id!==id;}); persist(); }
+function clearAll()        { if(!inv.length)return; if(!confirm('Obrisati cijeli inventar?'))return; inv=[]; persist(); }
+
+function persist() {
+  try { localStorage.setItem('bs_inv', JSON.stringify(inv)); } catch(e) {}
+  renderInventory();
+  document.getElementById('hdrBadge').textContent = inv.length + ' stavki';
+  document.getElementById('exportBar').style.display = (cTab==='list' && inv.length) ? 'flex' : 'none';
+}
+
+function renderInventory() {
+  var q   = (document.getElementById('searchInp').value || '').toLowerCase();
+  var el  = document.getElementById('invList');
+  var flt = q ? inv.filter(function(i){ return i.name.toLowerCase().includes(q)||i.code.toLowerCase().includes(q); }) : inv;
+  if (!flt.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-txt">' +
+      (inv.length ? 'Nema rezultata.' : 'Inventar je prazan.<br>Skenirajte ili unesite ručno.') + '</div></div>';
+    return;
+  }
+  el.innerHTML = flt.map(function(item, i) {
+    return '<div class="inv-item">' +
+      '<div class="inv-num">' + String(i+1).padStart(2,'0') + '</div>' +
+      '<div class="inv-info"><div class="inv-name">' + esc(item.name) + '</div><div class="inv-code">' + esc(item.code) + '</div></div>' +
+      '<div class="qty-ctrl">' +
+        '<button class="qty-btn" onclick="changeQty(' + item.id + ',-1)">−</button>' +
+        '<span class="qty-num">' + item.qty + '</span>' +
+        '<button class="qty-btn" onclick="changeQty(' + item.id + ',1)">+</button>' +
+      '</div>' +
+      '<button class="del-btn" onclick="removeItem(' + item.id + ')">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── PDF Export ──────────────────────────────────────────────────
+function exportPDF() {
+  if (!inv.length) { toast('Inventar je prazan'); return; }
+
+  var jsPDF    = window.jspdf.jsPDF;
+  var doc      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var margin   = 14;
+  var pageW    = 210;
+  var now      = new Date();
+  var totalKom = inv.reduce(function(s, i) { return s + i.qty; }, 0);
+  var fontName = 'helvetica';
+
+  // Zamjena srpskih slova koja helvetica ne podržava
+  function str(s) {
+    return String(s)
+      .replace(/č/g,'c').replace(/Č/g,'C')
+      .replace(/ć/g,'c').replace(/Ć/g,'C')
+      .replace(/š/g,'s').replace(/Š/g,'S')
+      .replace(/đ/g,'d').replace(/Đ/g,'D')
+      .replace(/ž/g,'z').replace(/Ž/g,'Z');
+  }
+
+  doc.autoTable({
+    startY: 14,
+    head: [[ '#', str('Naziv'), 'Barkod', str('Količina') ]],
+    body: inv.map(function(item, i) {
+      return [ i + 1, str(item.name), item.code, item.qty ];
+    }),
+    theme: 'grid',
+    styles:     { font: fontName, fontSize: 10, cellPadding: 4, textColor: [30,30,30], lineColor: [200,200,200], lineWidth: 0.3 },
+    headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'bold', fontSize: 10, halign: 'left' },
+    alternateRowStyles: { fillColor: [250,250,250] },
+    columnStyles: {
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 90 },
+      2: { cellWidth: 58 },
+      3: { cellWidth: 22, halign: 'center' }
+    },
+    margin: { left: margin, right: margin },
+    didDrawPage: function(data) {
+      doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
+      doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
+      doc.text('BarScan', margin, 290);
+    }
+  });
+
+
+
+  var pdfData = doc.output('datauristring');
+  mobileDownload(pdfData, 'inventar_' + now.toISOString().slice(0,10) + '.pdf', 'pdf');
+  toast('PDF kreiran ✓');
+}
+
+// ── CSV Export ───────────────────────────────────────────────────
+function exportCSV() {
+  if (!inv.length) { toast('Inventar je prazan'); return; }
+  var rows = inv.map(function(item,i){ return [i+1,'"'+item.name.replace(/"/g,'""')+'"',item.code,item.qty].join(','); });
+  var csv  = '\uFEFF' + ['Rb,Naziv,Barkod,Kolicina'].concat(rows).join('\r\n');
+  var b64  = btoa(unescape(encodeURIComponent(csv)));
+  mobileDownload('data:text/csv;charset=utf-8;base64,'+b64, 'inventar_'+new Date().toISOString().slice(0,10)+'.csv', 'csv');
+  toast('CSV kreiran ✓');
+}
+
+// ── Download (Android) ───────────────────────────────────────────
+function mobileDownload(dataUri, filename, type) {
+  // Pokušaj 1: direktan <a download> klik
+  try {
+    var a = document.createElement('a');
+    a.href = dataUri;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch(e) {}
+
+  // Pokušaj 2: Blob URL (bolji za PDF na mobilnom)
+  try {
+    var parts = dataUri.split(',');
+    var mime  = parts[0].match(/:(.*?);/)[1];
+    var raw   = atob(parts[1]);
+    var arr   = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    var blob    = new Blob([arr], { type: mime });
+    var blobUrl = URL.createObjectURL(blob);
+    var b = document.createElement('a');
+    b.href = blobUrl;
+    b.download = filename;
+    b.style.display = 'none';
+    document.body.appendChild(b);
+    b.click();
+    document.body.removeChild(b);
+    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 10000);
+  } catch(e) {
+    // Ako sve ne uspije — prikaži modal
+    showSaveModal(dataUri, filename, type);
+  }
+}
+
+function showSaveModal(dataUri, filename, type) {
+  var old = document.getElementById('saveModal');
+  if (old) old.remove();
+  var icon = type === 'pdf' ? '📄' : '📊';
+  var m = document.createElement('div');
+  m.id = 'saveModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML = '<div style="background:#1C1C20;border:1px solid #333;border-radius:16px 16px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;">' +
+    '<div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;">' + icon + ' Fajl je spreman</div>' +
+    '<div style="font-size:13px;color:var(--sub);line-height:1.8;margin-bottom:20px;">Pritisnite dugme, zatim: ⋮ → <strong>Dijeli</strong> → <strong>Sačuvaj</strong></div>' +
+    '<a href="' + dataUri + '" download="' + filename + '" target="_blank" style="display:block;background:var(--accent);color:#0B0B0D;text-align:center;padding:14px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;text-decoration:none;margin-bottom:10px;">' + icon + ' Otvori ' + type.toUpperCase() + '</a>' +
+    '<button onclick="document.getElementById(\'saveModal\').remove()" style="width:100%;background:var(--surface2);border:1px solid var(--border2);color:var(--sub);padding:12px;border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer;">Zatvori</button>' +
+  '</div>';
+  document.body.appendChild(m);
+  m.addEventListener('click', function(e) { if (e.target === m) m.remove(); });
+}
+
+// ── Toast ────────────────────────────────────────────────────────
+var toastTimer;
+function toast(msg) {
+  clearTimeout(toastTimer);
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2600);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+renderInventory();
+document.getElementById('hdrBadge').textContent = inv.length + ' stavki';
+
+// Service Worker za offline rad
+if ('serviceWorker' in navigator) {
+  var swCode = [
+    "const CACHE = 'barscan-v1';",
+    "const ASSETS = [",
+    "  'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js',",
+    "  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',",
+    "  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js'",
+    "];",
+    "self.addEventListener('install', function(e) {",
+    "  e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(ASSETS); }));",
+    "  self.skipWaiting();",
+    "});",
+    "self.addEventListener('activate', function(e) {",
+    "  e.waitUntil(clients.claim());",
+    "});",
+    "self.addEventListener('fetch', function(e) {",
+    "  e.respondWith(",
+    "    caches.match(e.request).then(function(r) {",
+    "      return r || fetch(e.request).then(function(res) {",
+    "        return caches.open(CACHE).then(function(c) {",
+    "          c.put(e.request, res.clone()); return res;",
+    "        });",
+    "      }).catch(function() { return r; });",
+    "    })",
+    "  );",
+    "});"
+  ].join('\n');
+
+  var swBlob = new Blob([swCode], { type: 'application/javascript' });
+  var swUrl  = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl, { scope: './' })
+    .catch(function() {});
+}
+
+// ── Service Worker (PWA offline podrška) ─────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function() {});
+}
+</script>
+</body>
+</html>
