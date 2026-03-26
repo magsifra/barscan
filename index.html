@@ -183,7 +183,10 @@
 <!-- ══ MANUAL ══ -->
 <div class="page" id="page-manual">
   <p class="slbl">Ručni unos</p>
-  
+  <div class="warn-box info">
+    <div class="wt">Uvijek radi</div>
+    <div class="wb">Ručni unos funkcioniše bez kamere i bez interneta. Broj barkoda piše ispod crtica na pakovanju.</div>
+  </div>
   <div class="input-grp" style="margin-top:14px">
     <label class="lbl">Broj barkoda</label>
     <input type="text" class="inp" id="mCode" placeholder="pr. 5901234123457" inputmode="numeric" autocomplete="off" oninput="clearPreview()">
@@ -219,8 +222,9 @@
 </div>
 
 <div class="export-bar" id="exportBar" style="display:none">
-  <button class="btn btn-success" onclick="exportPDF()">PDF</button>
-  <button class="btn btn-ghost"   onclick="exportCSV()" style="max-width:90px">CSV</button>
+  <button class="btn btn-success" onclick="exportPDF('share')">Dijeli PDF</button>
+  <button class="btn btn-success" onclick="exportPDF('download')" style="max-width:110px">Preuzmi PDF</button>
+  <button class="btn btn-ghost"   onclick="exportCSV()" style="max-width:70px">CSV</button>
 </div>
 
 <script>
@@ -590,7 +594,7 @@ function renderInventory() {
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── PDF Export ──────────────────────────────────────────────────
-function exportPDF() {
+function exportPDF(mode) {
   if (!inv.length) { toast('Inventar je prazan'); return; }
 
   var jsPDF    = window.jspdf.jsPDF;
@@ -636,9 +640,45 @@ function exportPDF() {
 
 
 
-  var pdfData = doc.output('datauristring');
-  mobileDownload(pdfData, 'inventar_' + now.toISOString().slice(0,10) + '.pdf', 'pdf');
-  toast('PDF kreiran');
+  var filename = 'inventar_' + now.toISOString().slice(0,10) + '.pdf';
+
+  if (mode === 'share') {
+    // Web Share API — otvara nativni Android share sheet
+    if (navigator.share && navigator.canShare) {
+      var pdfBlob = doc.output('blob');
+      var pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [pdfFile] })) {
+        navigator.share({
+          title: 'Inventar',
+          files: [pdfFile]
+        }).then(function() {
+          toast('PDF podijeljen');
+        }).catch(function(e) {
+          if (e.name !== 'AbortError') {
+            toast('Dijeljenje nije uspjelo');
+            downloadPdfBlob(doc, filename);
+          }
+        });
+        return;
+      }
+    }
+    // Fallback ako share nije podržan
+    toast('Dijeljenje nije podržano — preuzimanje...');
+    downloadPdfBlob(doc, filename);
+  } else {
+    // Direktno preuzimanje
+    downloadPdfBlob(doc, filename);
+  }
+}
+
+function downloadPdfBlob(doc, filename) {
+  var blob    = doc.output('blob');
+  var blobUrl = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = blobUrl; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 10000);
+  toast('PDF preuzet');
 }
 
 // ── CSV Export ───────────────────────────────────────────────────
