@@ -530,14 +530,9 @@ function downloadBarcode() {
 
 function addManualItem() {
   var code = document.getElementById('mCode').value.trim();
-  var name = document.getElementById('mName').value.trim();
+  var name = document.getElementById('mName').value.trim() || code;
   var qty  = parseInt(document.getElementById('mQty').value) || 1;
   if (!code) { toast('Unesite barkod broj'); return; }
-  if (!name) {
-    // Auto-assign "Artikal N" — count only manually-named articles
-    var manualCount = inv.filter(function(i) { return /^Artikal \d+$/.test(i.name); }).length;
-    name = 'Artikal ' + (manualCount + 1);
-  }
   upsert(code, name, qty, detectFmt(code));
   document.getElementById('mCode').value = '';
   document.getElementById('mName').value = '';
@@ -580,121 +575,35 @@ function renderInventory() {
     return;
   }
   el.innerHTML = flt.map(function(item, i) {
-    var bcId = 'bc_' + item.id.toString().replace('.','_');
     return '<div class="inv-item">' +
       '<div class="inv-num">' + String(i+1).padStart(2,'0') + '</div>' +
-      '<div class="inv-info">' +
-        '<div class="inv-name">' + esc(item.name) + '</div>' +
-        '<div class="inv-code">' + esc(item.code) + '</div>' +
-        '<svg id="' + bcId + '" style="display:block;margin-top:4px;max-width:130px;height:32px;background:#fff;border-radius:4px;padding:2px;"></svg>' +
-      '</div>' +
+      '<div class="inv-info"><div class="inv-name">' + esc(item.name) + '</div><div class="inv-code">' + esc(item.code) + '</div></div>' +
       '<div class="qty-ctrl">' +
         '<button class="qty-btn" onclick="changeQty(' + item.id + ',-1)">−</button>' +
         '<span class="qty-num">' + item.qty + '</span>' +
         '<button class="qty-btn" onclick="changeQty(' + item.id + ',1)">+</button>' +
       '</div>' +
-      '<button class="del-btn" onclick="removeItem(' + item.id + ')">✕</button>' +
+      '<button class="del-btn" onclick="removeItem(' + item.id + ')">Obriši</button>' +
     '</div>';
   }).join('');
-
-  // Render barcodes after DOM insertion
-  flt.forEach(function(item) {
-    var bcId = 'bc_' + item.id.toString().replace('.','_');
-    var svgEl = document.getElementById(bcId);
-    if (!svgEl) return;
-    try {
-      JsBarcode(svgEl, item.code, {
-        format: item.fmt && item.fmt !== 'MANUAL' ? item.fmt : 'CODE128',
-        width: 1.2, height: 28, displayValue: false, margin: 2
-      });
-    } catch(e) {
-      try { JsBarcode(svgEl, item.code, { format: 'CODE128', width: 1.2, height: 28, displayValue: false, margin: 2 }); } catch(e2) {}
-    }
-  });
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-// ── Helper: render barcode to PNG dataURL ────────────────────────
-function barcodeToPng(code, fmt) {
-  try {
-    var svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-    JsBarcode(svg, code, { format: fmt || 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 4 });
-    var svgData = new XMLSerializer().serializeToString(svg);
-    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    return svgBlob;
-  } catch(e) { return null; }
-}
 
 // ── PDF Export ──────────────────────────────────────────────────
 function exportPDF(mode) {
   if (!inv.length) { toast('Inventar je prazan'); return; }
 
-  // Render all barcodes to canvas PNGs before building PDF
-  toast('Priprema PDF-a...');
-
-  var promises = inv.map(function(item) {
-    return new Promise(function(resolve) {
-      try {
-        var svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
-        JsBarcode(svgEl, item.code, {
-          format: item.fmt || 'CODE128', width: 1.5, height: 40,
-          displayValue: false, margin: 4
-        });
-        var svgData  = new XMLSerializer().serializeToString(svgEl);
-        var svgBlob  = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        var url      = URL.createObjectURL(svgBlob);
-        var img      = new Image();
-        img.onload = function() {
-          var c = document.createElement('canvas');
-          c.width = img.width || 200; c.height = img.height || 50;
-          var ctx = c.getContext('2d');
-          ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
-          ctx.drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
-          resolve(c.toDataURL('image/png'));
-        };
-        img.onerror = function() { URL.revokeObjectURL(url); resolve(null); };
-        img.src = url;
-      } catch(e) { resolve(null); }
-    });
-  });
-
-  Promise.all(promises).then(function(barcodeImages) {
-    buildAndSavePDF(mode, barcodeImages);
-  });
-}
-
-function buildAndSavePDF(mode, barcodeImages) {
   var jsPDF    = window.jspdf.jsPDF;
   var doc      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   var margin   = 14;
   var pageW    = 210;
   var now      = new Date();
+  var totalKom = inv.reduce(function(s, i) { return s + i.qty; }, 0);
   var fontName = 'helvetica';
 
-  // Fetch & embed NotoSans for Serbian chars (Š Č Ć Ž Đ)
-  function embedFontAndBuild() {
-    fetch('https://fonts.gstatic.com/s/notosans/v36/o-0IIpQlx3QUlC5A4PNr5TRA.woff2')
-      .then(function(r) { return r.arrayBuffer(); })
-      .then(function(buf) {
-        // Convert ArrayBuffer to base64
-        var bytes = new Uint8Array(buf);
-        var binary = '';
-        for (var i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-        var b64 = btoa(binary);
-        doc.addFileToVFS('NotoSans.ttf', b64);
-        doc.addFont('NotoSans.ttf', 'NotoSans', 'normal');
-        fontName = 'NotoSans';
-        buildTable();
-      })
-      .catch(function() {
-        // fallback – transliterate if font load fails
-        buildTable();
-      });
-  }
-
-  function latinize(s) {
+  // Zamjena srpskih slova koja helvetica ne podržava
+  function str(s) {
     return String(s)
       .replace(/č/g,'c').replace(/Č/g,'C')
       .replace(/ć/g,'c').replace(/Ć/g,'C')
@@ -703,89 +612,60 @@ function buildAndSavePDF(mode, barcodeImages) {
       .replace(/ž/g,'z').replace(/Ž/g,'Z');
   }
 
-  function str(s) {
-    return fontName === 'NotoSans' ? String(s) : latinize(s);
-  }
-
-  function buildTable() {
-    doc.autoTable({
-      startY: 14,
-      head: [[ '#', 'Naziv', 'Barkod', 'Kol.' ]],
-      body: inv.map(function(item, i) {
-        return [ i + 1, str(item.name), { code: item.code, fmt: item.fmt, imgData: barcodeImages[i] }, item.qty ];
-      }),
-      theme: 'grid',
-      styles:     { font: fontName, fontSize: 10, cellPadding: 4, textColor: [30,30,30], lineColor: [200,200,200], lineWidth: 0.3 },
-      headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'bold', fontSize: 10, halign: 'left' },
-      alternateRowStyles: { fillColor: [250,250,250] },
-      columnStyles: {
-        0: { cellWidth: 12, halign: 'center' },
-        1: { cellWidth: 70 },
-        2: { cellWidth: 80 },
-        3: { cellWidth: 20, halign: 'center' }
-      },
-      margin: { left: margin, right: margin },
-      // Draw barcode image inside cell
-      didDrawCell: function(data) {
-        if (data.section === 'body' && data.column.index === 2) {
-          var cell = data.cell;
-          var raw  = data.row.raw[2];
-          if (raw && raw.imgData) {
-            // Numeric code text at top
-            doc.setFontSize(8);
-            doc.setFont(fontName, 'normal');
-            doc.setTextColor(30,30,30);
-            doc.text(String(raw.code), cell.x + 2, cell.y + 5);
-            // Barcode image below text
-            var imgX = cell.x + 2;
-            var imgY = cell.y + 7;
-            var imgW = cell.width - 4;
-            var imgH = Math.min(cell.height - 9, 14);
-            if (imgH > 2) {
-              try { doc.addImage(raw.imgData, 'PNG', imgX, imgY, imgW, imgH); } catch(e) {}
-            }
-          }
-        }
-      },
-      // Increase row height to fit barcode image
-      rowPageBreak: 'avoid',
-      bodyStyles: { minCellHeight: 22 },
-      didDrawPage: function(data) {
-        doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
-        doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
-      }
-    });
-
-    finishPDF();
-  }
-
-  function finishPDF() {
-    var filename = 'inventar_' + now.toISOString().slice(0,10) + '.pdf';
-
-    if (mode === 'share') {
-      if (navigator.share && navigator.canShare) {
-        var pdfBlob = doc.output('blob');
-        var pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
-        if (navigator.canShare({ files: [pdfFile] })) {
-          navigator.share({ title: 'Inventar', files: [pdfFile] })
-            .then(function() { toast('PDF podijeljen'); })
-            .catch(function(e) {
-              if (e.name !== 'AbortError') {
-                toast('Dijeljenje nije uspjelo');
-                downloadPdfBlob(doc, filename);
-              }
-            });
-          return;
-        }
-      }
-      toast('Dijeljenje nije podržano — preuzimanje...');
-      downloadPdfBlob(doc, filename);
-    } else {
-      downloadPdfBlob(doc, filename);
+  doc.autoTable({
+    startY: 14,
+    head: [[ '#', str('Naziv'), 'Barkod', str('Količina') ]],
+    body: inv.map(function(item, i) {
+      return [ i + 1, str(item.name), item.code, item.qty ];
+    }),
+    theme: 'grid',
+    styles:     { font: fontName, fontSize: 10, cellPadding: 4, textColor: [30,30,30], lineColor: [200,200,200], lineWidth: 0.3 },
+    headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'bold', fontSize: 10, halign: 'left' },
+    alternateRowStyles: { fillColor: [250,250,250] },
+    columnStyles: {
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 90 },
+      2: { cellWidth: 58 },
+      3: { cellWidth: 22, halign: 'center' }
+    },
+    margin: { left: margin, right: margin },
+    didDrawPage: function(data) {
+      doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
+      doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
     }
-  }
+  });
 
-  embedFontAndBuild();
+
+
+  var filename = 'inventar_' + now.toISOString().slice(0,10) + '.pdf';
+
+  if (mode === 'share') {
+    // Web Share API — otvara nativni Android share sheet
+    if (navigator.share && navigator.canShare) {
+      var pdfBlob = doc.output('blob');
+      var pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [pdfFile] })) {
+        navigator.share({
+          title: 'Inventar',
+          files: [pdfFile]
+        }).then(function() {
+          toast('PDF podijeljen');
+        }).catch(function(e) {
+          if (e.name !== 'AbortError') {
+            toast('Dijeljenje nije uspjelo');
+            downloadPdfBlob(doc, filename);
+          }
+        });
+        return;
+      }
+    }
+    // Fallback ako share nije podržan
+    toast('Dijeljenje nije podržano — preuzimanje...');
+    downloadPdfBlob(doc, filename);
+  } else {
+    // Direktno preuzimanje
+    downloadPdfBlob(doc, filename);
+  }
 }
 
 function downloadPdfBlob(doc, filename) {
