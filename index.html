@@ -230,6 +230,8 @@
 // ── State ────────────────────────────────────────────────────────
 var inv = [];
 try { inv = JSON.parse(localStorage.getItem('bs_inv') || '[]'); } catch(e) { inv = []; }
+var manualCounter = 0;
+try { manualCounter = parseInt(localStorage.getItem('bs_manual_counter') || '0'); } catch(e) {}
 var cTab      = 'scan';
 var last      = null;
 var camStream  = null;
@@ -529,9 +531,17 @@ function downloadBarcode() {
 }
 
 function addManualItem() {
-  var code = document.getElementById('mCode').value.trim();
-  var name = document.getElementById('mName').value.trim() || code;
-  var qty  = parseInt(document.getElementById('mQty').value) || 1;
+  var code      = document.getElementById('mCode').value.trim();
+  var nameInput = document.getElementById('mName').value.trim();
+  var name;
+  if (nameInput) {
+    name = nameInput;
+  } else {
+    manualCounter++;
+    try { localStorage.setItem('bs_manual_counter', String(manualCounter)); } catch(e) {}
+    name = 'Artikal ' + manualCounter;
+  }
+  var qty = parseInt(document.getElementById('mQty').value) || 1;
   if (!code) { toast('Unesite barkod broj'); return; }
   upsert(code, name, qty, detectFmt(code));
   document.getElementById('mCode').value = '';
@@ -591,18 +601,16 @@ function renderInventory() {
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── PDF Export ──────────────────────────────────────────────────
-function exportPDF(mode) {
+async function exportPDF(mode) {
   if (!inv.length) { toast('Inventar je prazan'); return; }
 
-  var jsPDF    = window.jspdf.jsPDF;
-  var doc      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  var margin   = 14;
-  var pageW    = 210;
-  var now      = new Date();
-  var totalKom = inv.reduce(function(s, i) { return s + i.qty; }, 0);
-  var fontName = 'helvetica';
+  var jsPDF  = window.jspdf.jsPDF;
+  var doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var margin = 14;
+  var pageW  = 210;
+  var now    = new Date();
 
-  // Zamjena srpskih slova koja helvetica ne podržava
+  // Zamjena srpskih slova (fallback ako font ne može da se učita)
   function str(s) {
     return String(s)
       .replace(/č/g,'c').replace(/Č/g,'C')
@@ -612,58 +620,98 @@ function exportPDF(mode) {
       .replace(/ž/g,'z').replace(/Ž/g,'Z');
   }
 
-  doc.autoTable({
-    startY: 14,
-    head: [[ '#', str('Naziv'), 'Barkod', str('Količina') ]],
-    body: inv.map(function(item, i) {
-      return [ i + 1, str(item.name), item.code, item.qty ];
-    }),
-    theme: 'grid',
-    styles:     { font: fontName, fontSize: 10, cellPadding: 4, textColor: [30,30,30], lineColor: [200,200,200], lineWidth: 0.3 },
-    headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'bold', fontSize: 10, halign: 'left' },
-    alternateRowStyles: { fillColor: [250,250,250] },
-    columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
-      1: { cellWidth: 90 },
-      2: { cellWidth: 58 },
-      3: { cellWidth: 22, halign: 'center' }
-    },
-    margin: { left: margin, right: margin },
-    didDrawPage: function(data) {
-      doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
-      doc.text('Stranica ' + data.pageNumber, pageW - margin, 290, { align: 'right' });
+  // Učitaj DejaVu Sans font koji podržava sva srpska slova
+  var fontName = 'helvetica';
+  var fix = str; // fallback — zamjenjuje slova
+  try {
+    toast('Učitavanje fonta...');
+    var resp   = await fetch('https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf');
+    var buffer = await resp.arrayBuffer();
+    var bytes  = new Uint8Array(buffer);
+    var b64 = '';
+    var chunk = 8192;
+    for (var ci = 0; ci < bytes.length; ci += chunk) {
+      b64 += String.fromCharCode.apply(null, bytes.subarray(ci, Math.min(ci + chunk, bytes.length)));
+    }
+    b64 = btoa(b64);
+    doc.addFileToVFS('DejaVuSans.ttf', b64);
+    doc.addFont('DejaVuSans.ttf', 'DejaVuSans', 'normal');
+    fontName = 'DejaVuSans';
+    fix = function(s) { return String(s); }; // nema potrebe za zamjenom
+  } catch(e) {
+    // Bez interneta — koristi helvetica + zamjenu slova
+  }
+
+  // Pre-generiši barkod sličice za svaki artikal
+  var barcodeImages = inv.map(function(item) {
+    try {
+      var canvas = document.createElement('canvas');
+      var fmt = (item.fmt && item.fmt !== 'MANUAL') ? item.fmt : detectFmt(item.code);
+      JsBarcode(canvas, item.code, { format: fmt, width: 2, height: 60, displayValue: false, margin: 4, background: '#ffffff' });
+      return canvas.toDataURL('image/png');
+    } catch(e) {
+      try {
+        var canvas2 = document.createElement('canvas');
+        JsBarcode(canvas2, item.code, { format: 'CODE128', width: 2, height: 60, displayValue: false, margin: 4, background: '#ffffff' });
+        return canvas2.toDataURL('image/png');
+      } catch(e2) { return null; }
     }
   });
 
-
+  doc.autoTable({
+    startY: 14,
+    head: [[ '#', fix('Naziv'), fix('Barkod'), fix('Količina') ]],
+    body: inv.map(function(item, i) {
+      return [ i + 1, fix(item.name), item.code, item.qty ];
+    }),
+    theme: 'grid',
+    styles:     { font: fontName, fontSize: 10, cellPadding: 4, textColor: [30,30,30], lineColor: [200,200,200], lineWidth: 0.3, minCellHeight: 26 },
+    headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'normal', fontSize: 10, halign: 'left' },
+    alternateRowStyles: { fillColor: [250,250,250] },
+    columnStyles: {
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 82 },
+      2: { cellWidth: 66 },
+      3: { cellWidth: 22, halign: 'center' }
+    },
+    margin: { left: margin, right: margin },
+    didDrawCell: function(data) {
+      // Crta barkod sličicu u koloni Barkod (index 2), samo u tijelu tabele
+      if (data.column.index === 2 && data.section === 'body') {
+        var imgUrl = barcodeImages[data.row.index];
+        if (imgUrl) {
+          var x = data.cell.x + 2;
+          var y = data.cell.y + 7.5;   // ispod teksta s brojem
+          var w = data.cell.width - 4;
+          var h = 13;
+          doc.addImage(imgUrl, 'PNG', x, y, w, h);
+        }
+      }
+    },
+    didDrawPage: function(data) {
+      doc.setFontSize(8); doc.setFont(fontName, 'normal'); doc.setTextColor(160,160,160);
+      doc.text(fix('Stranica ') + data.pageNumber, pageW - margin, 290, { align: 'right' });
+    }
+  });
 
   var filename = 'inventar_' + now.toISOString().slice(0,10) + '.pdf';
 
   if (mode === 'share') {
-    // Web Share API — otvara nativni Android share sheet
     if (navigator.share && navigator.canShare) {
       var pdfBlob = doc.output('blob');
       var pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
       if (navigator.canShare({ files: [pdfFile] })) {
-        navigator.share({
-          title: 'Inventar',
-          files: [pdfFile]
-        }).then(function() {
-          toast('PDF podijeljen');
-        }).catch(function(e) {
-          if (e.name !== 'AbortError') {
-            toast('Dijeljenje nije uspjelo');
-            downloadPdfBlob(doc, filename);
-          }
-        });
+        navigator.share({ title: fix('Inventar'), files: [pdfFile] })
+          .then(function() { toast('PDF podijeljen'); })
+          .catch(function(e) {
+            if (e.name !== 'AbortError') { toast('Dijeljenje nije uspjelo'); downloadPdfBlob(doc, filename); }
+          });
         return;
       }
     }
-    // Fallback ako share nije podržan
-    toast('Dijeljenje nije podržano — preuzimanje...');
+    toast(fix('Dijeljenje nije podržano — preuzimanje...'));
     downloadPdfBlob(doc, filename);
   } else {
-    // Direktno preuzimanje
     downloadPdfBlob(doc, filename);
   }
 }
