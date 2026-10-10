@@ -19,6 +19,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
     .footer-text {
             position: fixed;
@@ -142,6 +143,7 @@
       </div>
     </div>
     <div class="cam-status" id="camStatus">Pritisnite dugme ispod</div>
+    <button id="torchBtn" onclick="toggleTorch()" style="display:none; position:absolute; top:10px; right:10px; z-index:5; width:40px; height:40px; border-radius:50%; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:18px; cursor:pointer; align-items:center; justify-content:center;">&#9889;</button>
     <div id="zoomBar" style="display:none; position:absolute; bottom:36px; left:50%; transform:translateX(-50%); display:none; align-items:center; gap:10px; background:rgba(0,0,0,.55); padding:6px 14px; border-radius:24px;">
       <button onclick="changeZoom(-0.5)" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">−</button>
       <span id="zoomLabel" style="font-family:var(--mono);font-size:12px;color:#fff;min-width:36px;text-align:center;">1.0×</span>
@@ -166,6 +168,11 @@
 
   <div id="areaStart" style="display:none">
     <button class="btn btn-primary" id="btnStart" onclick="startScanning()">Pokreni skener</button>
+  </div>
+
+  <div style="margin-top:10px">
+    <button class="btn btn-ghost" onclick="document.getElementById('imgFile').click()">Skeniraj iz slike</button>
+    <input type="file" id="imgFile" accept="image/*" style="display:none" onchange="scanFromImage(this)">
   </div>
 
   <div id="scanResult" style="display:none; margin-top:14px">
@@ -218,6 +225,10 @@
   <div class="list-header">
     <p class="slbl" style="margin:0">Inventar</p>
     <button class="btn btn-danger" style="width:auto;padding:7px 13px;font-size:10px;margin:0" onclick="clearAll()">Obriši sve</button>
+  </div>
+  <div class="input-grp">
+    <label class="lbl">Naziv liste</label>
+    <input type="text" class="inp" id="listName" placeholder="" autocomplete="off" oninput="saveListName()">
   </div>
   <div class="search-wrap">
     <span class="search-icon"></span>
@@ -303,7 +314,7 @@ function startScanning() {
   setStatus('Pokrećem kameru...', '');
 
   navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
     audio: false
   })
   .then(function(stream) {
@@ -320,19 +331,23 @@ function startScanning() {
         document.getElementById('zoomLabel').textContent = '1.0×';
         setStatus('Usmjerite kameru na barkod...', '');
 
+        initZXing();
+        detector = null;
         if ('BarcodeDetector' in window) {
           try {
             detector = new BarcodeDetector({
-              formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code','pdf417','data_matrix','itf','codabar','aztec']
+              formats: ['ean_13','ean_8','code_128','code_39','code_93','upc_a','upc_e','qr_code','pdf417','data_matrix','itf','codabar','aztec']
             });
-            scanning = true;
-            scanLoop();
-          } catch(ex) {
-            setStatus('Greška: ' + ex.message, 'err');
-          }
+          } catch(ex) { detector = null; }
+        }
+        setupTrack();
+        if (detector || zxReader) {
+          scanning = true;
+          lastRead = null; readCount = 0;
+          scanLoop();
         } else {
-          setStatus('Ažurirajte Chrome na v83+ za skeniranje', 'err');
-          showCamErr('Vaš Chrome ne podržava BarcodeDetector.<br>Ažurirajte Chrome ili koristite <strong>Ručni unos</strong>.');
+          setStatus('Skener nije dostupan', 'err');
+          showCamErr('Skener se nije učitao (provjerite internet pri prvom pokretanju).<br>Koristite <strong>Ručni unos</strong>.');
         }
       }).catch(function(ex) {
         btn.textContent = 'Pokreni skener';
@@ -349,31 +364,182 @@ function startScanning() {
 }
 
 // ── Scan loop ────────────────────────────────────────────────────
+var zxReader = null, scanCanvas = null, scanCtx = null;
+var frameN = 0, lastRead = null, readCount = 0, torchOn = false;
+var WEAK_FORMATS = ['CODE-39','CODE-93','ITF','CODABAR'];
+
+function fmtName(f) { return String(f || 'BARKOD').toUpperCase().replace(/_/g, '-'); }
+
+// ZXing (isti engine koji koriste Binary Eye i Barcode Scanner) — TRY_HARDER + invertovani kodovi
+function initZXing() {
+  if (zxReader || typeof ZXing === 'undefined') return;
+  try {
+    var F = ZXing.BarcodeFormat;
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.CODE_93,
+      F.ITF, F.CODABAR, F.QR_CODE, F.DATA_MATRIX, F.PDF_417, F.AZTEC
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxReader = new ZXing.MultiFormatReader();
+    zxReader.setHints(hints);
+  } catch(e) { zxReader = null; }
+}
+
+function zxDecodeCanvas(canvas) {
+  if (!zxReader || !canvas.width || !canvas.height) return null;
+  var src;
+  try { src = new ZXing.HTMLCanvasElementLuminanceSource(canvas); } catch(e) { return null; }
+  var variants = [src];
+  try { variants.push(src.invert()); } catch(e) {}
+  for (var i = 0; i < variants.length; i++) {
+    try {
+      var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(variants[i]));
+      var r = zxReader.decodeWithState(bmp);
+      if (r) return { code: r.getText(), type: fmtName(ZXing.BarcodeFormat[r.getBarcodeFormat()]) };
+    } catch(e) {}
+  }
+  return null;
+}
+
+function zxScanFrame(video) {
+  var vw = video.videoWidth, vh = video.videoHeight;
+  var sx = 0, sy = 0, sw = vw, sh = vh;
+  if (frameN % 2 === 0) { sh = Math.round(vh * 0.5); sy = Math.round((vh - sh) / 2); } // središnja traka u punoj rezoluciji
+  var scale = Math.min(1, 1280 / sw);
+  var cw = Math.round(sw * scale), ch = Math.round(sh * scale);
+  if (!scanCanvas) {
+    scanCanvas = document.createElement('canvas');
+    scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  scanCanvas.width = cw; scanCanvas.height = ch;
+  scanCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+  return zxDecodeCanvas(scanCanvas);
+}
+
 function scanLoop() {
-  if (!scanning || !detector) return;
+  if (!scanning) return;
   var video = document.getElementById('video');
-  if (!video || video.readyState < 2) {
+  if (!video || video.readyState < 2 || !video.videoWidth) {
     scanTimer = setTimeout(scanLoop, 150);
     return;
   }
-  detector.detect(video)
-    .then(function(results) {
-      if (!scanning) return;
-      if (results && results.length > 0) {
-        scanning = false;
-        var r = results[0];
-        onCode(r.rawValue, (r.format || 'BARKOD').toUpperCase().replace(/_/g, '-'));
-      } else {
-        scanTimer = setTimeout(scanLoop, 150);
-      }
-    })
-    .catch(function() {
-      if (scanning) scanTimer = setTimeout(scanLoop, 150);
-    });
+  frameN++;
+  var p = detector
+    ? detector.detect(video).then(function(r) {
+        return (r && r.length) ? { code: r[0].rawValue, type: fmtName(r[0].format) } : null;
+      }).catch(function() { return null; })
+    : Promise.resolve(null);
+  p.then(function(res) {
+    if (!scanning) return;
+    if (!res && zxReader) res = zxScanFrame(video);
+    if (res && res.code) handleRead(res.code, res.type);
+    else scanTimer = setTimeout(scanLoop, 60);
+  });
+}
+
+// Slabije formate (Code 39/93, ITF, Codabar) potvrđuje drugo uzastopno očitanje — manje pogrešnih čitanja
+function handleRead(code, type) {
+  if (WEAK_FORMATS.indexOf(type) >= 0) {
+    if (lastRead === code) readCount++; else { lastRead = code; readCount = 1; }
+    if (readCount < 2) { scanTimer = setTimeout(scanLoop, 60); return; }
+  }
+  lastRead = null; readCount = 0;
+  scanning = false;
+  onCode(code, type);
+}
+
+function feedback() {
+  try { if (navigator.vibrate) navigator.vibrate(80); } catch(e) {}
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var ctx = new AC(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square'; o.frequency.value = 1800; g.gain.value = 0.08;
+    o.connect(g); g.connect(ctx.destination); o.start();
+    setTimeout(function() { try { o.stop(); ctx.close(); } catch(e) {} }, 90);
+  } catch(e) {}
+}
+
+// Kontinuirani autofokus + blic
+function setupTrack() {
+  torchOn = false;
+  var tb = document.getElementById('torchBtn');
+  tb.style.display = 'none'; tb.style.background = 'rgba(0,0,0,.55)';
+  if (!camStream) return;
+  var track = camStream.getVideoTracks()[0];
+  if (!track || !track.getCapabilities) return;
+  var caps = track.getCapabilities();
+  try {
+    if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function() {});
+    }
+  } catch(e) {}
+  if (caps.torch) tb.style.display = 'flex';
+}
+
+function toggleTorch() {
+  if (!camStream) return;
+  var track = camStream.getVideoTracks()[0];
+  if (!track) return;
+  torchOn = !torchOn;
+  try {
+    track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function() { torchOn = false; toast('Blic nije podržan'); });
+  } catch(e) { torchOn = false; toast('Blic nije podržan'); }
+  document.getElementById('torchBtn').style.background = torchOn ? 'rgba(245,166,35,.8)' : 'rgba(0,0,0,.55)';
+}
+
+// Skeniranje iz slike (galerija) — kao Binary Eye
+function rotateCanvas(c) {
+  var r = document.createElement('canvas');
+  r.width = c.height; r.height = c.width;
+  var x = r.getContext('2d');
+  x.translate(r.width / 2, r.height / 2);
+  x.rotate(Math.PI / 2);
+  x.drawImage(c, -c.width / 2, -c.height / 2);
+  return r;
+}
+
+function scanFromImage(inp) {
+  var file = inp.files && inp.files[0];
+  if (!file) return;
+  inp.value = '';
+  scanning = false; clearTimeout(scanTimer);
+  toast('Čitam sliku...');
+  var url = URL.createObjectURL(file);
+  var img = new Image();
+  img.onload = function() {
+    URL.revokeObjectURL(url);
+    var scale = Math.min(1, 2000 / Math.max(img.width, img.height));
+    var c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    var done = function(res) {
+      if (res && res.code) { feedback(); onCode(res.code, res.type); }
+      else { toast('Barkod nije pronađen'); if (camStream) resumeScanning(); }
+    };
+    var tryZX = function() {
+      initZXing();
+      var r = zxDecodeCanvas(c);
+      if (!r) r = zxDecodeCanvas(rotateCanvas(c));
+      done(r);
+    };
+    var nat = null;
+    if ('BarcodeDetector' in window) { try { nat = new BarcodeDetector(); } catch(e) {} }
+    if (nat) {
+      nat.detect(c).then(function(r) {
+        if (r && r.length) done({ code: r[0].rawValue, type: fmtName(r[0].format) });
+        else tryZX();
+      }).catch(tryZX);
+    } else tryZX();
+  };
+  img.onerror = function() { URL.revokeObjectURL(url); toast('Slika se ne može otvoriti'); if (camStream) resumeScanning(); };
+  img.src = url;
 }
 
 function onCode(code, type) {
   last = { code: code, type: type };
+  feedback();
   document.getElementById('resCoded').textContent = code;
   document.getElementById('resType').textContent  = type;
   document.getElementById('scanOverlay').style.display = 'none';
@@ -397,6 +563,7 @@ function addScannedItem() {
 
 function resumeScanning() {
   document.getElementById('scanResult').style.display  = 'none';
+  if (!camStream) { setStatus('Pritisnite dugme ispod', ''); return; }
   document.getElementById('scanOverlay').style.display = 'flex';
   setStatus('Usmjerite kameru na barkod...', '');
   scanning = true;
@@ -426,6 +593,8 @@ function stopCamera() {
   var v = document.getElementById('video');
   if (v) v.srcObject = null;
   document.getElementById('zoomBar').style.display = 'none';
+  document.getElementById('torchBtn').style.display = 'none';
+  torchOn = false;
 }
 
 function changeZoom(delta) {
@@ -666,8 +835,20 @@ async function exportPDF(mode) {
     }
   });
 
+  // Naziv liste (ako je prazan, ništa se ne prikazuje)
+  var listTitle = (document.getElementById('listName').value || '').trim();
+  var tableStartY = 14;
+  if (listTitle) {
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(16);
+    doc.setTextColor(30, 30, 30);
+    var titleLines = doc.splitTextToSize(fix(listTitle), pageW - margin * 2);
+    doc.text(titleLines, margin, 18);
+    tableStartY = 18 + titleLines.length * 7 + 2;
+  }
+
   doc.autoTable({
-    startY: 14,
+    startY: tableStartY,
     head: [[ '#', fix('Naziv'), fix('Barkod'), fix('Količina') ]],
     body: inv.map(function(item, i) {
       return [ i + 1, fix(item.name), item.code, item.qty ];
@@ -677,8 +858,8 @@ async function exportPDF(mode) {
     headStyles: { font: fontName, fillColor: [240,240,240], textColor: [30,30,30], fontStyle: 'normal', fontSize: 10, halign: 'left' },
     alternateRowStyles: { fillColor: [250,250,250] },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
-      1: { cellWidth: 82 },
+      0: { cellWidth: 18, halign: 'center' },
+      1: { cellWidth: 76 },
       2: { cellWidth: 66 },
       3: { cellWidth: 22, halign: 'center' }
     },
@@ -806,7 +987,13 @@ function toast(msg) {
   toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2600);
 }
 
+// ── Naziv liste ──────────────────────────────────────────────────
+function saveListName() {
+  try { localStorage.setItem('bs_list_name', document.getElementById('listName').value); } catch(e) {}
+}
+
 // ── Init ─────────────────────────────────────────────────────────
+try { document.getElementById('listName').value = localStorage.getItem('bs_list_name') || ''; } catch(e) {}
 renderInventory();
 document.getElementById('hdrBadge').textContent = inv.length + ' stavki';
 
