@@ -101,6 +101,7 @@
     .sort-opts { display:flex; flex-wrap:wrap; gap:8px 16px; }
     .sort-opts label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:14px; color:var(--sub); cursor:pointer; }
     .sort-opts input { accent-color:var(--accent); width:18px; height:18px; margin:0; }
+    .qr-info { font-family:var(--mono); font-size:12px; color:var(--muted); margin:-2px 0 12px; }
     .barcode-wrap { background:#fff; border-radius:10px; padding:14px; text-align:center; margin:14px 0; }
     #barcodeSvg { max-width:100%; }
     .empty { text-align:center; padding:56px 20px; color:var(--muted); }
@@ -246,6 +247,7 @@
       <label><input type="radio" name="sortRadio" value="qtyDesc" onchange="setSort(this.value)"> Količina &darr;</label>
     </div>
   </div>
+  <div id="qrInfo" class="qr-info"></div>
   <div id="invList"></div>
 </div>
 
@@ -786,6 +788,7 @@ function setSort(v) {
 }
 
 function renderInventory() {
+  updateQrInfo();
   var q   = (document.getElementById('searchInp').value || '').toLowerCase();
   var el  = document.getElementById('invList');
   var base = sortedInv();
@@ -810,6 +813,254 @@ function renderInventory() {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── QR enkoder (bez biblioteka, radi offline) — byte mode, verzije 1–40, ECC L/M/Q/H ──
+var QR = (function() {
+  var ECC = {
+    L: [-1,7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],
+    M: [-1,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28],
+    Q: [-1,13,22,18,26,18,24,18,22,20,24,28,26,24,20,30,24,28,28,26,30,28,30,30,30,30,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],
+    H: [-1,17,28,22,16,22,28,26,26,24,28,24,28,22,24,24,30,28,28,26,28,30,24,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30]
+  };
+  var BLK = {
+    L: [-1,1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25],
+    M: [-1,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49],
+    Q: [-1,1,1,2,2,4,4,6,6,8,8,8,10,12,16,12,17,16,18,21,20,23,23,25,27,29,34,34,35,38,40,43,45,48,51,53,56,59,62,65,68],
+    H: [-1,1,1,2,4,4,4,5,6,8,8,11,11,16,16,18,16,19,21,25,25,25,34,30,32,35,37,40,42,45,48,51,54,57,60,63,66,70,74,77,81]
+  };
+  var FMT = { L: 1, M: 0, Q: 3, H: 2 };
+
+  function rawModules(v) {
+    var r = (16 * v + 128) * v + 64;
+    if (v >= 2) { var a = Math.floor(v / 7) + 2; r -= (25 * a - 10) * a - 55; if (v >= 7) r -= 36; }
+    return r;
+  }
+  function dataCw(v, e) { return Math.floor(rawModules(v) / 8) - ECC[e][v] * BLK[e][v]; }
+  function gfMul(x, y) { var z = 0; for (var i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z; }
+  function rsDiv(deg) {
+    var r = []; for (var i = 0; i < deg - 1; i++) r.push(0); r.push(1);
+    var root = 1;
+    for (var i2 = 0; i2 < deg; i2++) {
+      for (var j = 0; j < deg; j++) { r[j] = gfMul(r[j], root); if (j + 1 < deg) r[j] ^= r[j + 1]; }
+      root = gfMul(root, 2);
+    }
+    return r;
+  }
+  function rsRem(data, div) {
+    var r = div.map(function() { return 0; });
+    data.forEach(function(b) {
+      var f = b ^ r.shift(); r.push(0);
+      div.forEach(function(c, i) { r[i] ^= gfMul(c, f); });
+    });
+    return r;
+  }
+  function utf8(s) { return Array.prototype.slice.call(new TextEncoder().encode(s)); }
+  function alignPos(v) {
+    if (v === 1) return [];
+    var n = Math.floor(v / 7) + 2;
+    var step = v === 32 ? 26 : Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2;
+    var r = [6];
+    for (var p = v * 4 + 10; r.length < n; p -= step) r.splice(1, 0, p);
+    return r;
+  }
+  function bit(x, i) { return ((x >>> i) & 1) !== 0; }
+
+  // Maksimalan broj bajtova za dati ECC nivo (verzija 40)
+  function capacity(ecl) { return Math.floor((dataCw(40, ecl || 'L') * 8 - 4 - 16) / 8); }
+
+  function encode(text, ecl) {
+    ecl = ecl || 'L';
+    var bytes = utf8(text), ver;
+    for (ver = 1; ver <= 40; ver++) {
+      var cb = ver <= 9 ? 8 : 16;
+      if (4 + cb + bytes.length * 8 <= dataCw(ver, ecl) * 8) break;
+    }
+    if (ver > 40) return null;
+
+    // bitovi podataka
+    var bits = [];
+    function put(val, len) { for (var i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); }
+    put(4, 4); put(bytes.length, ver <= 9 ? 8 : 16);
+    bytes.forEach(function(b) { put(b, 8); });
+    var capBits = dataCw(ver, ecl) * 8;
+    put(0, Math.min(4, capBits - bits.length));
+    put(0, (8 - bits.length % 8) % 8);
+    for (var pad = 0xEC; bits.length < capBits; pad ^= 0xEC ^ 0x11) put(pad, 8);
+    var data = [];
+    for (var i = 0; i < bits.length; i += 8) {
+      var b = 0; for (var k = 0; k < 8; k++) b = (b << 1) | bits[i + k]; data.push(b);
+    }
+
+    // ECC + interleave
+    var nb = BLK[ecl][ver], el = ECC[ecl][ver], raw = Math.floor(rawModules(ver) / 8);
+    var ns = nb - raw % nb, sl = Math.floor(raw / nb);
+    var blocks = [], div = rsDiv(el);
+    for (var bi = 0, kk = 0; bi < nb; bi++) {
+      var dl = sl - el + (bi < ns ? 0 : 1);
+      var dat = data.slice(kk, kk + dl); kk += dl;
+      var ecc = rsRem(dat, div);
+      if (bi < ns) dat.push(0);
+      blocks.push(dat.concat(ecc));
+    }
+    var all = [];
+    for (var x = 0; x < blocks[0].length; x++)
+      for (var y = 0; y < nb; y++)
+        if (x !== sl - el || y >= ns) all.push(blocks[y][x]);
+
+    // matrica
+    var size = ver * 4 + 17, m = [], f = [];
+    for (var r = 0; r < size; r++) { m.push(new Array(size).fill(false)); f.push(new Array(size).fill(false)); }
+    function setF(cx, cy, v) { m[cy][cx] = v; f[cy][cx] = true; }
+    for (var t = 0; t < size; t++) { setF(6, t, t % 2 === 0); setF(t, 6, t % 2 === 0); }
+    function finder(cx, cy) {
+      for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
+        var d = Math.max(Math.abs(dx), Math.abs(dy)), xx = cx + dx, yy = cy + dy;
+        if (xx >= 0 && xx < size && yy >= 0 && yy < size) setF(xx, yy, d !== 2 && d !== 4);
+      }
+    }
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    var ap = alignPos(ver), an = ap.length;
+    for (var ai = 0; ai < an; ai++) for (var aj = 0; aj < an; aj++) {
+      if ((ai === 0 && aj === 0) || (ai === 0 && aj === an - 1) || (ai === an - 1 && aj === 0)) continue;
+      for (var ey = -2; ey <= 2; ey++) for (var ex = -2; ex <= 2; ex++)
+        setF(ap[ai] + ex, ap[aj] + ey, Math.max(Math.abs(ex), Math.abs(ey)) !== 1);
+    }
+    function formatBits(mask) {
+      var d = (FMT[ecl] << 3) | mask, rem = d;
+      for (var i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      var fb = ((d << 10) | rem) ^ 0x5412;
+      for (var a = 0; a <= 5; a++) setF(8, a, bit(fb, a));
+      setF(8, 7, bit(fb, 6)); setF(8, 8, bit(fb, 7)); setF(7, 8, bit(fb, 8));
+      for (var b2 = 9; b2 < 15; b2++) setF(14 - b2, 8, bit(fb, b2));
+      for (var c = 0; c < 8; c++) setF(size - 1 - c, 8, bit(fb, c));
+      for (var d2 = 8; d2 < 15; d2++) setF(8, size - 15 + d2, bit(fb, d2));
+      setF(8, size - 8, true);
+    }
+    formatBits(0);
+    if (ver >= 7) {
+      var vr = ver;
+      for (var q = 0; q < 12; q++) vr = (vr << 1) ^ ((vr >>> 11) * 0x1F25);
+      var vb = (ver << 12) | vr;
+      for (var vi = 0; vi < 18; vi++) {
+        var vv = bit(vb, vi), va = size - 11 + vi % 3, vc = Math.floor(vi / 3);
+        setF(va, vc, vv); setF(vc, va, vv);
+      }
+    }
+    // podaci u cik-cak redoslijedu
+    var idx = 0;
+    for (var right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (var vert = 0; vert < size; vert++) for (var j = 0; j < 2; j++) {
+        var px = right - j, up = ((right + 1) & 2) === 0, py = up ? size - 1 - vert : vert;
+        if (!f[py][px] && idx < all.length * 8) { m[py][px] = bit(all[idx >>> 3], 7 - (idx & 7)); idx++; }
+      }
+    }
+    function applyMask(mask) {
+      for (var yy = 0; yy < size; yy++) for (var xx = 0; xx < size; xx++) {
+        var inv;
+        switch (mask) {
+          case 0: inv = (xx + yy) % 2 === 0; break;
+          case 1: inv = yy % 2 === 0; break;
+          case 2: inv = xx % 3 === 0; break;
+          case 3: inv = (xx + yy) % 3 === 0; break;
+          case 4: inv = (Math.floor(xx / 3) + Math.floor(yy / 2)) % 2 === 0; break;
+          case 5: inv = xx * yy % 2 + xx * yy % 3 === 0; break;
+          case 6: inv = (xx * yy % 2 + xx * yy % 3) % 2 === 0; break;
+          default: inv = ((xx + yy) % 2 + xx * yy % 3) % 2 === 0;
+        }
+        if (!f[yy][xx] && inv) m[yy][xx] = !m[yy][xx];
+      }
+    }
+    function penalty() {
+      var res = 0, dark = 0, a, b;
+      for (var dir = 0; dir < 2; dir++) for (a = 0; a < size; a++) {
+        var run = 1, line = [];
+        for (b = 0; b < size; b++) line.push(dir ? m[b][a] : m[a][b]);
+        for (b = 1; b < size; b++) {
+          if (line[b] === line[b - 1]) run++;
+          else { if (run >= 5) res += 3 + run - 5; run = 1; }
+        }
+        if (run >= 5) res += 3 + run - 5;
+        for (b = 0; b + 11 <= size; b++) {
+          var s = '';
+          for (var z = 0; z < 11; z++) s += line[b + z] ? '1' : '0';
+          if (s === '10111010000' || s === '00001011101') res += 40;
+        }
+      }
+      for (var y2 = 0; y2 < size; y2++) for (var x2 = 0; x2 < size; x2++) {
+        if (m[y2][x2]) dark++;
+        if (x2 + 1 < size && y2 + 1 < size && m[y2][x2] === m[y2][x2 + 1] && m[y2][x2] === m[y2 + 1][x2] && m[y2][x2] === m[y2 + 1][x2 + 1]) res += 3;
+      }
+      var tot = size * size;
+      res += (Math.ceil(Math.abs(dark * 20 - tot * 10) / tot) - 1) * 10;
+      return res;
+    }
+    var best = 0, bestP = Infinity;
+    for (var mk = 0; mk < 8; mk++) {
+      applyMask(mk); formatBits(mk);
+      var p = penalty();
+      if (p < bestP) { bestP = p; best = mk; }
+      applyMask(mk);
+    }
+    applyMask(best); formatBits(best);
+    return { n: size, version: ver, bytes: bytes.length, modules: m };
+  }
+
+  return { encode: encode, capacity: capacity };
+})();
+
+
+// ── QR sa podacima inventara ─────────────────────────────────────
+var QR_HEAD = 'Rb;Naziv;Barkod;Količina';
+function qrRow(it, i) {
+  return (i + 1) + ';' + String(it.name).replace(/[;\r\n\t]+/g, ' ').trim() + ';' + String(it.code).replace(/[;\r\n\t]+/g, '') + ';' + it.qty;
+}
+// Koliko stavki staje u jedan QR (nivo L, najveći kapacitet)
+function qrFit(list) {
+  var cap = QR.capacity('L'), enc = new TextEncoder();
+  var used = enc.encode(QR_HEAD).length, n = 0;
+  for (var i = 0; i < list.length; i++) {
+    var len = enc.encode('\n' + qrRow(list[i], i)).length;
+    if (used + len > cap) break;
+    used += len; n++;
+  }
+  return { n: n, bytes: used, cap: cap, total: list.length };
+}
+function buildInventoryQR(list) {
+  try {
+    if (!list.length) return null;
+    var fit = qrFit(list);
+    if (!fit.n) return null;
+    var rows = [];
+    for (var i = 0; i < fit.n; i++) rows.push(qrRow(list[i], i));
+    var q = QR.encode(QR_HEAD + '\n' + rows.join('\n'), 'L');
+    if (!q) return null;
+    return { qr: q, shown: fit.n, total: list.length, bytes: fit.bytes };
+  } catch(e) { return null; }
+}
+function drawQR(doc, qr, x, y, size) {
+  var n = qr.n, mod = size / n, e = 0.01;
+  doc.setFillColor(0, 0, 0);
+  for (var r = 0; r < n; r++) {
+    var c = 0;
+    while (c < n) {
+      if (qr.modules[r][c]) {
+        var st = c;
+        while (c < n && qr.modules[r][c]) c++;
+        doc.rect(x + st * mod, y + r * mod, (c - st) * mod + e, mod + e, 'F');
+      } else c++;
+    }
+  }
+}
+function updateQrInfo() {
+  var el = document.getElementById('qrInfo');
+  if (!el) return;
+  if (!inv.length) { el.textContent = ''; return; }
+  var f = qrFit(sortedInv());
+  el.textContent = f.n < f.total
+    ? 'QR u PDF-u: stane ' + f.n + ' od ' + f.total + ' stavki (' + f.bytes + ' / ' + f.cap + ' B)'
+    : 'QR u PDF-u: sve stavke (' + f.bytes + ' / ' + f.cap + ' B)';
+}
 
 // ── PDF Export ──────────────────────────────────────────────────
 async function exportPDF(mode) {
@@ -870,6 +1121,11 @@ async function exportPDF(mode) {
     }
   });
 
+  // QR kod sa svim podacima (gore desno, paralelno s naslovom)
+  var qrInfo = buildInventoryQR(sorted);
+  var qrMm = 0, qrTop = 10;
+  if (qrInfo) qrMm = Math.max(26, Math.min(64, qrInfo.qr.n * 0.35));
+
   // Naziv liste (ako je prazan, ništa se ne prikazuje)
   var listTitle = (document.getElementById('listName').value || '').trim();
   var tableStartY = 14;
@@ -877,9 +1133,20 @@ async function exportPDF(mode) {
     doc.setFont(fontName, 'normal');
     doc.setFontSize(16);
     doc.setTextColor(30, 30, 30);
-    var titleLines = doc.splitTextToSize(fix(listTitle), pageW - margin * 2);
+    var titleW = pageW - margin * 2 - (qrMm ? qrMm + 6 : 0);
+    var titleLines = doc.splitTextToSize(fix(listTitle), titleW);
     doc.text(titleLines, margin, 18);
     tableStartY = 18 + titleLines.length * 7 + 2;
+  }
+  if (qrInfo) {
+    drawQR(doc, qrInfo.qr, pageW - margin - qrMm, qrTop, qrMm);
+    var qrBottom = qrTop + qrMm;
+    if (qrInfo.shown < qrInfo.total) {
+      doc.setFont(fontName, 'normal'); doc.setFontSize(7); doc.setTextColor(120, 120, 120);
+      doc.text('QR: stavke 1-' + qrInfo.shown + ' od ' + qrInfo.total, pageW - margin, qrBottom + 3, { align: 'right' });
+      qrBottom += 4;
+    }
+    tableStartY = Math.max(tableStartY, qrBottom + 4);
   }
 
   doc.autoTable({
