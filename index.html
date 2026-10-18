@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="BarScan">
   <meta name="theme-color" content="#0B0B0D">
   <title>BarScan</title>
+  <script>if(/^#[dr]=/.test(location.hash))document.documentElement.className="view-mode";</script>
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -102,6 +103,20 @@
     .sort-opts label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:14px; color:var(--sub); cursor:pointer; }
     .sort-opts input { accent-color:var(--accent); width:18px; height:18px; margin:0; }
     .qr-info { font-family:var(--mono); font-size:12px; color:var(--muted); margin:-2px 0 12px; }
+    .qr-set { margin:0 0 14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+    .qr-set summary { font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); cursor:pointer; }
+    .qr-set[open] summary { margin-bottom:12px; }
+    .qr-hint { font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:6px; word-break:break-all; }
+    #viewPage, #viewBar { display:none; }
+    html.view-mode .header, html.view-mode .tabs, html.view-mode .page, html.view-mode #exportBar { display:none !important; }
+    html.view-mode #viewPage { display:block; padding:18px; }
+    html.view-mode #viewBar { display:flex; }
+    .view-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:16px; }
+    .view-title { font-size:21px; font-weight:600; color:var(--text); line-height:1.3; word-break:break-word; }
+    .view-note { font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--accent); background:var(--accent-dim); border:1px solid rgba(245,166,35,.3); border-radius:8px; padding:10px 12px; margin:-4px 0 14px; }
+    html.view-mode .footer-text { position:static; text-align:center; padding:12px 0 0; }
+    #viewBar .btn { padding:14px 8px; font-size:14px; white-space:nowrap; }
+    .view-qty { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--accent); white-space:nowrap; }
     .barcode-wrap { background:#fff; border-radius:10px; padding:14px; text-align:center; margin:14px 0; }
     #barcodeSvg { max-width:100%; }
     .empty { text-align:center; padding:56px 20px; color:var(--muted); }
@@ -248,7 +263,37 @@
     </div>
   </div>
   <div id="qrInfo" class="qr-info"></div>
+  <details class="qr-set">
+    <summary>Postavke QR koda</summary>
+    <div class="input-grp">
+      <label class="lbl">QR kod sadrži</label>
+      <div class="sort-opts">
+        <label><input type="radio" name="qrModeRadio" value="link" onchange="setQrMode(this.value)"> Link na listu</label>
+        <label><input type="radio" name="qrModeRadio" value="data" onchange="setQrMode(this.value)"> Podatke (radi bez interneta)</label>
+      </div>
+    </div>
+    <div class="input-grp" style="margin-bottom:0">
+      <label class="lbl">Adresa aplikacije</label>
+      <input type="text" class="inp" id="baseUrl" placeholder="https://..." autocomplete="off" inputmode="url" oninput="saveBaseUrl()">
+      <div class="qr-hint" id="baseHint"></div>
+    </div>
+  </details>
   <div id="invList"></div>
+</div>
+
+<div id="viewPage">
+  <div class="view-head">
+    <div class="view-title" id="viewTitle"></div>
+    <div class="badge" id="viewCount"></div>
+  </div>
+  <div class="view-note" id="viewNote" style="display:none"></div>
+  <div id="viewList"></div>
+</div>
+
+<div class="export-bar" id="viewBar">
+  <button class="btn btn-success" onclick="exportPDF('share')">Dijeli PDF</button>
+  <button class="btn btn-success" onclick="exportPDF('download')" style="max-width:150px">Preuzmi PDF</button>
+  <button class="btn btn-ghost" onclick="exportCSV()" style="max-width:64px">CSV</button>
 </div>
 
 <div class="export-bar" id="exportBar" style="display:none">
@@ -1052,14 +1097,161 @@ function drawQR(doc, qr, x, y, size) {
     }
   }
 }
+// ── QR koji vodi na link (lista je kompresovana u samom linku) ───
+var qrMode = 'link', baseUrl = '', VIEW = false;
+try { qrMode = localStorage.getItem('bs_qr_mode') || 'link'; baseUrl = localStorage.getItem('bs_base_url') || ''; } catch(e) {}
+
+function getBase() {
+  var b = (baseUrl || '').trim();
+  if (b) return b.split('#')[0];
+  if (/^https?:$/.test(location.protocol)) return location.href.split('#')[0];
+  return '';
+}
+var CAN_COMPRESS = (typeof CompressionStream === 'function' && typeof DecompressionStream === 'function');
+function streamBytes(kind, bytes) {
+  var st = kind === 'c' ? new CompressionStream('deflate-raw') : new DecompressionStream('deflate-raw');
+  var w = st.writable.getWriter();
+  w.write(bytes).catch(function() {}); w.close().catch(function() {});
+  return new Response(st.readable).arrayBuffer().then(function(b) { return new Uint8Array(b); });
+}
+function toB64u(u8) {
+  var s = '';
+  for (var i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function fromB64u(t) {
+  t = t.replace(/-/g, '+').replace(/_/g, '/');
+  while (t.length % 4) t += '=';
+  var s = atob(t), u = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return u;
+}
+function cleanTxt(v) { return String(v).replace(/[\r\n\t]+/g, ' ').trim(); }
+function linkPayload(list, n, title) {
+  var rows = [cleanTxt(title || '') + '\t' + list.length];
+  for (var i = 0; i < n; i++) rows.push(cleanTxt(list[i].name) + '\t' + cleanTxt(list[i].code) + '\t' + list[i].qty);
+  return rows.join('\n');
+}
+function makeLink(base, list, n, title) {
+  var raw = new TextEncoder().encode(linkPayload(list, n, title));
+  var rawUrl = base + '#r=' + toB64u(raw);
+  if (!CAN_COMPRESS) return Promise.resolve(rawUrl);
+  return streamBytes('c', raw).then(function(c) {
+    var u = base + '#d=' + toB64u(c);
+    return u.length < rawUrl.length ? u : rawUrl;
+  }).catch(function() { return rawUrl; });
+}
+async function buildLinkQR(list, title) {
+  var base = getBase();
+  if (!base || !list.length) return null;
+  var cap = QR.capacity('L');
+  var n = list.length, u = await makeLink(base, list, n, title);
+  if (u.length > cap) {
+    var lo = 1, hi = list.length - 1, best = 0, bu = null;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1, um = await makeLink(base, list, mid, title);
+      if (um.length <= cap) { best = mid; bu = um; lo = mid + 1; } else hi = mid - 1;
+    }
+    if (!best) return null;
+    n = best; u = bu;
+  }
+  var q = QR.encode(u, 'L');
+  if (!q) return null;
+  return { qr: q, shown: n, total: list.length, bytes: u.length, cap: cap, link: true, url: u };
+}
+// Link ako je izabran i adresa postoji, inače QR s podacima
+async function buildQR(list, title) {
+  if (qrMode === 'link') {
+    try { var r = await buildLinkQR(list, title); if (r) return r; } catch(e) {}
+  }
+  var d = buildInventoryQR(list);
+  if (d) { d.link = false; d.cap = QR.capacity('L'); }
+  return d;
+}
+function curTitle() { var e = document.getElementById('listName'); return e ? e.value : ''; }
+
+var qrTok = 0;
 function updateQrInfo() {
   var el = document.getElementById('qrInfo');
-  if (!el) return;
+  if (!el || VIEW) return;
+  var tok = ++qrTok;
   if (!inv.length) { el.textContent = ''; return; }
-  var f = qrFit(sortedInv());
-  el.textContent = f.n < f.total
-    ? 'QR u PDF-u: stane ' + f.n + ' od ' + f.total + ' stavki (' + f.bytes + ' / ' + f.cap + ' B)'
-    : 'QR u PDF-u: sve stavke (' + f.bytes + ' / ' + f.cap + ' B)';
+  buildQR(sortedInv(), curTitle()).then(function(r) {
+    if (tok !== qrTok) return;
+    if (!r) { el.textContent = 'QR u PDF-u: nije moguće napraviti'; return; }
+    var kind = r.link ? 'QR (link)' : 'QR (podaci)';
+    var note = (qrMode === 'link' && !r.link) ? ' — za link upišite adresu aplikacije' : '';
+    el.textContent = r.shown < r.total
+      ? kind + ': stane ' + r.shown + ' od ' + r.total + ' stavki (' + r.bytes + ' / ' + r.cap + ' B)' + note
+      : kind + ': sve stavke (' + r.bytes + ' / ' + r.cap + ' B)' + note;
+  });
+}
+
+function setQrMode(v) {
+  qrMode = v;
+  try { localStorage.setItem('bs_qr_mode', v); } catch(e) {}
+  updateBaseHint(); updateQrInfo();
+}
+function saveBaseUrl() {
+  var v = document.getElementById('baseUrl').value.trim();
+  if (v && !/^https?:\/\//i.test(v)) v = 'https://' + v;
+  baseUrl = v;
+  try { localStorage.setItem('bs_base_url', v); } catch(e) {}
+  updateBaseHint(); updateQrInfo();
+}
+function updateBaseHint() {
+  var el = document.getElementById('baseHint');
+  if (!el) return;
+  var b = getBase();
+  el.textContent = b ? 'Link vodi na: ' + b
+    : 'Nije postavljeno. Upišite adresu na kojoj je objavljen ovaj fajl, inače se u QR stavljaju podaci.';
+}
+
+// ── Pregled liste (otvara se skeniranjem QR-a) ───────────────────
+function parseHash() {
+  var m = /^#([dr])=([A-Za-z0-9_-]+)$/.exec(location.hash || '');
+  if (!m) return Promise.resolve(null);
+  var u8;
+  try { u8 = fromB64u(m[2]); } catch(e) { return Promise.resolve({ error: true }); }
+  var p = m[1] === 'd' ? streamBytes('d', u8) : Promise.resolve(u8);
+  return p.then(function(b) {
+    var lines = new TextDecoder().decode(b).split('\n');
+    var head = (lines.shift() || '').split('\t'), title = head[0] || '', items = [];
+    lines.forEach(function(l) {
+      if (!l) return;
+      var f = l.split('\t');
+      if (f.length < 3) return;
+      items.push({ id: items.length + 1, name: f[0], code: f[1], qty: parseInt(f[2]) || 1, fmt: 'MANUAL' });
+    });
+    return { title: title, items: items, total: Math.max(items.length, parseInt(head[1]) || 0) };
+  }).catch(function() { return { error: true }; });
+}
+function enterView(d) {
+  VIEW = true;
+  document.documentElement.className = 'view-mode';
+  var t = document.getElementById('viewTitle'), list = document.getElementById('viewList');
+  if (!d || d.error || !d.items.length) {
+    t.textContent = 'Lista nije dostupna';
+    list.innerHTML = '<div class="empty"><div class="empty-txt">Link nije ispravan ili je nepotpun.</div></div>';
+    document.getElementById('viewBar').style.display = 'none';
+    return;
+  }
+  inv = d.items; sortMode = 'none';   // samo u memoriji — ne dira vaš sačuvani inventar
+  document.getElementById('listName').value = d.title;
+  document.title = d.title || 'Inventar';
+  t.textContent = d.title || 'Inventar';
+  document.getElementById('viewCount').textContent = d.items.length + ' stavki';
+  var note = document.getElementById('viewNote');
+  if (d.total > d.items.length) {
+    note.textContent = 'Prikazano je prvih ' + d.items.length + ' od ' + d.total + ' stavki — ostale nisu stale u QR kod. Cijela lista je u odštampanom PDF-u.';
+    note.style.display = 'block';
+  }
+  list.innerHTML = d.items.map(function(it, i) {
+    return '<div class="inv-item">' +
+      '<div class="inv-num">' + String(i + 1).padStart(2, '0') + '</div>' +
+      '<div class="inv-info"><div class="inv-name" style="white-space:normal">' + esc(it.name) + '</div><div class="inv-code">' + esc(it.code) + '</div></div>' +
+      '<div class="view-qty">&times; ' + it.qty + '</div></div>';
+  }).join('');
 }
 
 // ── PDF Export ──────────────────────────────────────────────────
@@ -1122,9 +1314,9 @@ async function exportPDF(mode) {
   });
 
   // QR kod sa svim podacima (gore desno, paralelno s naslovom)
-  var qrInfo = buildInventoryQR(sorted);
+  var qrInfo = await buildQR(sorted, document.getElementById('listName').value);
   var qrMm = 0, qrTop = 10;
-  if (qrInfo) qrMm = Math.max(26, Math.min(64, qrInfo.qr.n * 0.35));
+  if (qrInfo) qrMm = Math.max(26, Math.min(66, qrInfo.qr.n * 0.4));
 
   // Naziv liste (ako je prazan, ništa se ne prikazuje)
   var listTitle = (document.getElementById('listName').value || '').trim();
@@ -1292,6 +1484,7 @@ function toast(msg) {
 // ── Naziv liste ──────────────────────────────────────────────────
 function saveListName() {
   try { localStorage.setItem('bs_list_name', document.getElementById('listName').value); } catch(e) {}
+  updateQrInfo();
 }
 
 // ── Init ─────────────────────────────────────────────────────────
@@ -1300,8 +1493,16 @@ try { document.getElementById('listName').value = localStorage.getItem('bs_list_
   var r = document.querySelector('input[name="sortRadio"][value="' + sortMode + '"]');
   if (r) r.checked = true;
 })();
+(function() {
+  var r = document.querySelector('input[name="qrModeRadio"][value="' + qrMode + '"]');
+  if (r) r.checked = true;
+  document.getElementById('baseUrl').value = baseUrl;
+  updateBaseHint();
+})();
 renderInventory();
 document.getElementById('hdrBadge').textContent = inv.length + ' stavki';
+window.addEventListener('hashchange', function() { location.reload(); });
+parseHash().then(function(d) { if (d) enterView(d); });
 
 // Service Worker za offline rad
 if ('serviceWorker' in navigator) {
