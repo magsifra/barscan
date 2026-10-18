@@ -291,8 +291,9 @@
 </div>
 
 <div class="export-bar" id="viewBar">
-  <button class="btn btn-success" onclick="exportPDF('share')">Dijeli PDF</button>
-  <button class="btn btn-success" onclick="exportPDF('download')" style="max-width:150px">Preuzmi PDF</button>
+  <button class="btn btn-success" onclick="exportPDF('open')">Otvori PDF</button>
+  <button class="btn btn-success" onclick="exportPDF('share')">Dijeli</button>
+  <button class="btn btn-success" onclick="exportPDF('download')" style="max-width:110px">Preuzmi</button>
   <button class="btn btn-ghost" onclick="exportCSV()" style="max-width:64px">CSV</button>
 </div>
 
@@ -1379,6 +1380,12 @@ async function exportPDF(mode) {
 
   var filename = 'inventar_' + now.toISOString().slice(0,10) + '.pdf';
 
+  if (mode === 'open') {
+    // Otvara PDF u pregledniku (isti tab); Chrome na telefonu ga može ponuditi za preuzimanje
+    location.href = URL.createObjectURL(doc.output('blob'));
+    return;
+  }
+
   if (mode === 'share') {
     if (navigator.share && navigator.canShare) {
       var pdfBlob = doc.output('blob');
@@ -1502,7 +1509,16 @@ try { document.getElementById('listName').value = localStorage.getItem('bs_list_
 renderInventory();
 document.getElementById('hdrBadge').textContent = inv.length + ' stavki';
 window.addEventListener('hashchange', function() { location.reload(); });
-parseHash().then(function(d) { if (d) enterView(d); });
+parseHash().then(function(d) {
+  if (!d) return;
+  enterView(d);
+  // Skenirani QR odmah otvara PDF (jednom po otvaranju linka; dugmad ostaju kao rezerva)
+  if (d.error || !window.jspdf) return;
+  var key = 'bs_opened_' + location.hash.slice(0, 40);
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch(e) {}
+  toast('Otvaram PDF...');
+  exportPDF('open').catch(function() { toast('PDF nije otvoren — koristite dugme'); });
+});
 
 // Service Worker za offline rad
 if ('serviceWorker' in navigator) {
